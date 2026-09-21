@@ -18,6 +18,7 @@ import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
+import { runConnectCommand } from "./connect-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
 import { isPluginHostInvocation, runPluginHostCommand } from "./plugin-host-command.js";
 import { isDwfChildInvocation, runDwfChildCommand } from "./dwf-child-command.js";
@@ -543,6 +544,8 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       );
     case "logout":
       return await runLogoutCommand(ctx, options, commandDeps);
+    case "connect":
+      return runConnectCommand(ctx, options, parsed.positionals.slice(1));
     case "commands":
       return await runCommandsCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
     case "plugin":

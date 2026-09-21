@@ -30,7 +30,7 @@ modules:
     publicEntrypoints: [packages/services/src/storage/contract.ts]
     layers: { domain: domain, app: app, adapters: adapters }
     layerOrder: [domain, app, adapters]
-    owner: desktop-settings
+    owner: workspace
   - id: client
     roots: [packages/client/src]
     managed: false
@@ -45,9 +45,6 @@ modules:
     managed: false
   - id: web
     roots: [packages/web/src]
-    managed: false
-  - id: desktop
-    roots: [packages/desktop/src]
     managed: false
   - id: formal-proof
     roots: [packages/formal-proof/src]

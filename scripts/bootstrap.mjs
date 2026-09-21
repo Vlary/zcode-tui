@@ -133,21 +133,6 @@ function runBootstrapServerBuild() {
   );
 }
 
-function runBootstrapDesktopBuild() {
-  const desktopDir = resolve(rootDir, "packages/desktop");
-  // bootstrap:with-remote 的目标是完成远程资源和本地 runtime 初始化。
-  // 继续触发 desktop app bundle 会进入生产构建脚本里的 tsup/vite 路径，在本地低内存环境中被 SIGKILL。
-  // 这里仅在 bootstrap runner 中保留 build meta，生产/CI 的 build:no-runtime-assets 仍保持原语义。
-  runCommand(process.execPath, ["scripts/build-metadata.mjs"], {
-    cwd: desktopDir,
-    env: {
-      ...process.env,
-      ...bootstrapWithRemoteEnv,
-    },
-  });
-  console.log("[bootstrap:with-remote] skip desktop app bundle build; runtime assets are prepared");
-}
-
 function runBootstrapWithRemoteBuild() {
   for (const filter of ["@zcode/rpc", "@zcode/web", "@zcode/formal-proof"]) {
     // pnpm -r 会在 bootstrap:with-remote 的最终构建阶段并发启动多个 Vite/esbuild/tsup。
@@ -155,23 +140,12 @@ function runBootstrapWithRemoteBuild() {
     runPnpm(["--filter", filter, "build"]);
   }
   runBootstrapServerBuild();
-  runBootstrapDesktopBuild();
 }
 
 runGit(["submodule", "update", "--init", "--recursive", "apps/zcode-cli"]);
 
 runPnpm(withRemoteAssets ? ["install", "--config.confirmModulesPurge=false"] : ["install"]);
 
-runPnpm(["prepare:desktop-runtime"], {
-  env: withRemoteAssets
-    ? {}
-    : {
-        // 本地 bootstrap 过去默认准备 remote mock-cdn，
-        // 每次都会重新打包跨平台组件，导致普通初始化很慢。
-        // 默认只准备桌面端本地 runtime；需要远程资源时使用 bootstrap:with-remote。
-        ZCODE_SKIP_REMOTE_ASSETS: "1",
-      },
-});
 
 if (withRemoteAssets) {
   runBootstrapWithRemoteBuild();

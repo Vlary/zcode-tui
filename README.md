@@ -2,12 +2,13 @@
 
 ![zcode TUI](screenshots/tui-terminal.png)
 
-基于 [zai-org/ZCode](https://github.com/zai-org/ZCode) 的 **TUI / CLI 定制版**：只关心终端里的 `zcode`——Agent CLI、全屏 TUI、子代理与多智能体编排。不涉及桌面端与 Web 端的定制开发（上游源码保留，构建链完整）。
+基于 [zai-org/ZCode](https://github.com/zai-org/ZCode) 的 **纯 TUI / CLI 定制版**：只关心终端里的 `zcode`——Agent CLI、全屏 TUI、子代理与多智能体编排。桌面端（Electron）代码已整体剔除，仓库只保留 TUI/CLI 及其依赖闭包（web/server 源码保留，构建链完整）。
 
 相对上游新增 / 修改的内容：
 
 - **AgentSwarm 工具**（对标 Kimi Code 的 swarm）：一次调用按 `prompt_template + items` 批量 fan-out 最多 128 个子代理，带断点续跑、每子代理超时、限速退避重试与启动节流
 - **TUI swarm 显示**：工具调用行渲染为 `swarm (N subagents)` 分组卡片，附 items 预览与续跑计数；子代理沿用侧边栏 Subagents 区（点击可看 transcript）
+- **SSH 远程工作区（`zcode connect`）**：从桌面版迁移的远程工作区能力——agent 与文件改动都发生在远端机器，本地终端只承载交互；`--deploy` 可把当前 CLI 单文件产物自动部署到远端
 - **Windows 中文乱码修复**：GBK 代码页的控制台在启动时自动切到 UTF-8（仅 win32 + TTY 生效，不影响其他平台）
 
 ## 快速开始
@@ -62,6 +63,17 @@ AgentSwarm({
 | `ZCODE_SWARM_TIMEOUT_MS` | `600000` | 单个子代理执行超时 |
 
 与相邻工具的分工：少量异构任务用 `Agent`（一条消息多个调用并行）；需要类型化结果、循环、gate 的复杂编排用 `CreateWorkflow` 写 TS 脚本；大批量同构任务用 `AgentSwarm`。
+
+## SSH 远程工作区（connect）
+
+对齐桌面版「远程工作区」的语义：agent 与文件改动都发生在远端机器，本地终端只承载交互。
+
+```bash
+zcode connect vlary@192.168.3.21:22:/home/vlary/WorkSpace   # 直连并进入远端 TUI
+zcode connect vlary@server --deploy                          # 远端没装 zcode 时先推送 CLI
+```
+
+目标语法 `[user@]host[:port][:/remote/path]`。实现零新增依赖：用系统 ssh 以 PTY 直通在远端目标目录启动 zcode；`--deploy` 通过 scp 把当前 CLI 单文件产物安装到远端 `~/.local/bin/zcode`。连接检查阶段使用 `BatchMode` 防止密码认证时挂死，最终直通阶段保持交互（可输密码）。
 
 ## 目录结构（TUI/CLI 相关）
 

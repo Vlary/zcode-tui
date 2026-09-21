@@ -16,6 +16,7 @@ With no command, zcode opens the full-screen TUI.
 
 Commands:
   app-server Run the ZCode Protocol stdio app server
+  connect [target]  Attach to a remote workspace over SSH (agent runs remotely; --deploy installs the CLI there)
   commands   List custom slash commands (\`commands list\`)
   doctor     Inspect runtime and packaging assumptions
   login [zai|bigmodel]  Sign in through browser authorization

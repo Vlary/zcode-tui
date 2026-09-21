@@ -16,6 +16,7 @@ export const zhCN: ZCodeCopy = {
 
 命令:
   app-server 运行 ZCode Protocol stdio app server
+  connect [目标]  SSH 连接远程工作区（agent 在远端运行；--deploy 自动部署 CLI）
   commands   列出自定义 slash commands（\`commands list\`）
   doctor     检查运行时和打包假设
   login [zai|bigmodel]  通过浏览器授权登录

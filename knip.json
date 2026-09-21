@@ -10,15 +10,6 @@
         "scripts/mise-run.mjs"
       ]
     },
-    "packages/desktop": {
-      "entry": [
-        "electron-builder.config.js",
-        "scripts/sign-windows-hook.cjs",
-        "src/renderer/*.html",
-        "src/renderer/cuaPermissionPanel.ts",
-        "src/renderer/src/resource-manager.tsx"
-      ]
-    },
     "packages/server": {
       "entry": ["src/index.ts", "src/entry-stdio.ts", "build-remote.ts"]
     },
