@@ -15,6 +15,7 @@ Usage:
 With no command, zcode opens the full-screen TUI.
 
 Commands:
+  acp        Serve ACP (Agent Client Protocol) on stdio for editors like Zed
   app-server Run the ZCode Protocol stdio app server
   connect [target]  Attach to a remote workspace over SSH (agent runs remotely; --deploy installs the CLI there)
   commands   List custom slash commands (\`commands list\`)

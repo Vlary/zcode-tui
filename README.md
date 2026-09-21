@@ -8,6 +8,7 @@
 
 - **AgentSwarm 工具**（对标 Kimi Code 的 swarm）：一次调用按 `prompt_template + items` 批量 fan-out 最多 128 个子代理，带断点续跑、每子代理超时、限速退避重试与启动节流
 - **TUI swarm 显示**：工具调用行渲染为 `swarm (N subagents)` 分组卡片，附 items 预览与续跑计数；子代理沿用侧边栏 Subagents 区（点击可看 transcript）
+- **ACP 编辑器集成（`zcode acp`）**：以 Agent Client Protocol agent 身份服务 stdio，Zed 等 ACP 客户端直接驱动——思考流/正文流/工具调用/用量全量回传，阻塞式 prompt 完成语义
 - **SSH 远程工作区（`zcode connect`）**：从桌面版迁移的远程工作区能力——agent 与文件改动都发生在远端机器，本地终端只承载交互；`--deploy` 可把当前 CLI 单文件产物自动部署到远端
 - **Windows 中文乱码修复**：GBK 代码页的控制台在启动时自动切到 UTF-8（仅 win32 + TTY 生效，不影响其他平台）
 
@@ -63,6 +64,18 @@ AgentSwarm({
 | `ZCODE_SWARM_TIMEOUT_MS` | `600000` | 单个子代理执行超时 |
 
 与相邻工具的分工：少量异构任务用 `Agent`（一条消息多个调用并行）；需要类型化结果、循环、gate 的复杂编排用 `CreateWorkflow` 写 TS 脚本；大批量同构任务用 `AgentSwarm`。
+
+## ACP 支持（编辑器集成）
+
+`zcode acp` 以 ACP（Agent Client Protocol，Zed 主推的开放标准）agent 身份服务 stdio，Zed 等任何 ACP 客户端可直接驱动本 CLI。桥接层把 ACP 的会话与请求流翻译为内部 ZCode Protocol（自动拉起 `app-server` 子进程），并回传思考流、正文流、工具调用与用量更新；`session/prompt` 遵循 ACP 完成语义——阻塞到 turn 结束返回 `stopReason`。基于官方 `@agentclientprotocol/sdk`。
+
+```json
+// Zed settings.json → agent settings
+{
+  "name": "zcode",
+  "command": { "path": "node", "args": ["/path/to/zcode.cjs", "acp"] }
+}
+```
 
 ## SSH 远程工作区（connect）
 

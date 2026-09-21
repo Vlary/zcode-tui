@@ -24,6 +24,7 @@
     "lint:fix": "oxlint --write src"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
     "@zcode/adapters": "workspace:*",
     "@zcode/bootstrap": "workspace:*",
     "@zcode/contracts": "workspace:*",
