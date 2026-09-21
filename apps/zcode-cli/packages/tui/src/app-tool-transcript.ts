@@ -125,6 +125,7 @@ export function buildToolTranscriptProjection(
   if (normalized === "todowrite") return { detailLines: todoWriteDetails(record) };
   if (normalized === "todoread") return { detailLines: ["todos: read current state"] };
   if (normalized === "agent") return { detailLines: agentDetails(record) };
+  if (normalized === "agentswarm") return agentSwarmProjection(record);
   if (normalized === "skill")
     return {
       detailLines: compactLines([fieldLine(record, "name"), fieldLine(record, "args")]),
@@ -320,6 +321,29 @@ function agentDetails(record: Record<string, unknown>): string[] {
     booleanField(record, "run_in_background") ? "background: true" : undefined,
     previewLine(record, "prompt"),
   ]);
+}
+
+function agentSwarmProjection(record: Record<string, unknown>): ToolTranscriptInputProjection {
+  const items = Array.isArray(record["items"]) ? (record["items"] as unknown[]) : [];
+  const resumeIds = asRecord(record["resume_agent_ids"]);
+  const resumeCount = resumeIds ? Object.keys(resumeIds).length : 0;
+  const template =
+    typeof record["prompt_template"] === "string" && record["prompt_template"].length > 0
+      ? record["prompt_template"]
+      : undefined;
+  const detailLines = compactLines([
+    fieldLine(record, "description"),
+    template === undefined ? undefined : `template: ${truncateDisplay(template, MAX_DETAIL_WIDTH - 10)}`,
+  ]);
+  for (const item of items.slice(0, 3)) {
+    detailLines.push(`· ${truncateDisplay(String(item), MAX_DETAIL_WIDTH - 2)}`);
+  }
+  if (items.length > 3) detailLines.push(`… +${items.length - 3} more`);
+  if (resumeCount > 0) detailLines.push(`resume: ${resumeCount} agent(s)`);
+  return {
+    title: `swarm (${items.length + resumeCount} subagents)`,
+    detailLines,
+  };
 }
 
 function genericInputDetails(record: Record<string, unknown>): string[] {

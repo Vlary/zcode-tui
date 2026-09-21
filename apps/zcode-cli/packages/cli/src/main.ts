@@ -10,11 +10,14 @@ import { installCliProcessErrorBoundary } from "./process-errors.js";
 import { installProtocolStderrBoundary } from "./protocol-stderr.js";
 import { createProtocolProcessLifecycle } from "./protocol-lifecycle.js";
 import { isProtocolServerInvocation } from "./arguments.js";
+import { ensureWindowsConsoleUtf8 } from "./windows-console.js";
 
 void main();
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  // 必须先于任何中文/ANSI 输出：GBK 代码页的控制台会把 UTF-8 字节解码成乱码。
+  ensureWindowsConsoleUtf8();
   // 存储模式也可运行在 Host Worker 中，不能修改整个 Host 的进程名称。
   if (!argv.includes("--prepare-storage")) setCliProcessTitle();
   // 真实 zcode CLI 进程里仍可能有少量路径直接读取 process.env。

@@ -34,6 +34,7 @@ import {
   createTaskToolEntry,
   taskToolEntry,
 } from "./agent.js";
+import { agentSwarmToolEntry } from "./agent-swarm.js";
 import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
@@ -106,6 +107,7 @@ export const builtInTools: ToolEntry[] = [
   taskStopToolEntry,
   readSessionContextToolEntry,
   agentToolEntry,
+  agentSwarmToolEntry,
   taskToolEntry,
   skillToolEntry,
   jsToolEntry,

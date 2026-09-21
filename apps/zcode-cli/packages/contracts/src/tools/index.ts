@@ -15,6 +15,7 @@ export * from "./glob.js";
 export * from "./grep.js";
 export * from "./webfetch.js";
 export * from "./agent.js";
+export * from "./agent-swarm.js";
 export * from "./skill.js";
 export * from "./todo.js";
 export * from "./automation.js";
