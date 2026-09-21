@@ -105,70 +105,117 @@ export function formatAgentSwarmOutputForModel(output: unknown): string {
 }
 
 // ============================================================
-// AgentSwarm 实时进度板：handler 在子代理状态变化时渲染 title+rows，
-// 经 ToolCallProgress 事件送达 TUI 刷新工具卡片。
+// AgentSwarm 实时进度板（Kimi Code 同款视觉规格）
 // ============================================================
+// ─ Agent Swarm ─ description ─────── 线框标题
+//  001 [⣿⣷⣄⣀] ✓ item…           多列网格 cell：
+//  002 [⣶⣤⣀⣀] ⠋ item…             3 位序号 + braille 8 级进度条
+//  003 [⣀⣀⣀⣀] Queued…              + 终态标记 + 标签
+//  ⠋ Working… ━━━━━━━━━╌╌╌╌╌ (2/6)  底部 pip 状态条
+// handler 在状态迁移与 tick 定时器上重发整板；TUI 热替换工具卡片。
 
 export interface SwarmProgressEntry {
   item: string;
   status: "queued" | "running" | "done" | "failed";
+  ticks: number;
   durationMs?: number;
   totalTokens?: number;
 }
 
-const SWARM_ROW_LIMIT = 8;
-const SWARM_ITEM_WIDTH = 42;
+const BOARD_WIDTH = 88;
+const CELL_COLUMNS = 2;
+const CELL_GAP = "  ";
+const CELL_WIDTH = Math.floor((BOARD_WIDTH - CELL_GAP.length * (CELL_COLUMNS - 1)) / CELL_COLUMNS);
+const BAR_CELLS = 4;
+const BRAILLE_LEVELS = ["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"] as const;
+const BRAILLE_EMPTY = "⣀";
+const BRAILLE_SEPARATOR = "⢸";
+const PIP_FILLED = "━";
+const PIP_EMPTY = "╌";
+const PIP_WIDTH = 18;
+const TICKS_PER_BAR = BAR_CELLS * BRAILLE_LEVELS.length;
 
-function swarmRowSymbol(status: SwarmProgressEntry["status"]): string {
-  if (status === "done") return "✓";
-  if (status === "failed") return "✗";
-  if (status === "running") return "⠏";
-  return "·";
+function brailleBar(ticks: number, settled: boolean): string {
+  if (settled) return "⣿".repeat(BAR_CELLS);
+  const safe = Math.max(0, Math.floor(ticks)) % TICKS_PER_BAR;
+  const activeCells = safe === 0 ? 0 : Math.ceil(safe / BRAILLE_LEVELS.length);
+  let out = "";
+  for (let i = 0; i < BAR_CELLS; i += 1) {
+    if (i === activeCells - 1 && activeCells > 0 && activeCells < BAR_CELLS) {
+      out += BRAILLE_SEPARATOR;
+      continue;
+    }
+    const cellStart = i * BRAILLE_LEVELS.length;
+    const count = Math.max(0, Math.min(BRAILLE_LEVELS.length, safe - cellStart));
+    out += count === 0 ? BRAILLE_EMPTY : BRAILLE_LEVELS[count - 1];
+  }
+  return out;
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
+function cellLabel(entry: SwarmProgressEntry): string {
+  if (entry.status === "failed") return `✗ ${entry.item}`;
+  if (entry.status === "done") {
+    const tokens = entry.totalTokens === undefined ? "" : ` · ${formatTokens(entry.totalTokens)}`;
+    return `✓ ${entry.item}${tokens}`;
+  }
+  if (entry.status === "running") return `⠋ ${entry.item}`;
+  return "Queued…";
+}
+
+function padCell(text: string): string {
+  return text.length > CELL_WIDTH ? `${text.slice(0, CELL_WIDTH - 1)}…` : text.padEnd(CELL_WIDTH, " ");
 }
 
 function formatTokens(tokens: number): string {
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k tok`;
-  return `${tokens} tok`;
+  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k tok` : `${tokens} tok`;
 }
 
 export function renderSwarmProgress(input: {
   description: string;
   entries: readonly SwarmProgressEntry[];
 }): { title: string; rows: string[] } {
-  const done = input.entries.filter((entry) => entry.status === "done").length;
-  const failed = input.entries.filter((entry) => entry.status === "failed").length;
+  const entries = input.entries;
+  const done = entries.filter((e) => e.status === "done").length;
+  const failed = entries.filter((e) => e.status === "failed").length;
+  const running = entries.filter((e) => e.status === "running").length;
   const settled = done + failed;
-  const total = input.entries.length;
-  const running = input.entries.filter((entry) => entry.status === "running").length;
-  const titleParts = [
-    `swarm · ${input.description}`,
-    settled >= total
-      ? `${settled}/${total} complete${failed > 0 ? `, ${failed} failed` : ""}`
-      : `${settled}/${total} done · ${running} running`,
-  ];
-  const visible = input.entries
-    .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => entry.status !== "queued")
-    .slice(-SWARM_ROW_LIMIT);
-  const rows = visible.map(({ entry }) => {
-    const item = entry.item.length > SWARM_ITEM_WIDTH
-      ? `${entry.item.slice(0, SWARM_ITEM_WIDTH - 1)}…`
-      : entry.item;
-    const details: string[] = [];
-    if (entry.durationMs !== undefined) details.push(formatDuration(entry.durationMs));
-    if (entry.totalTokens !== undefined) details.push(formatTokens(entry.totalTokens));
-    if (entry.status === "failed") details.push("failed");
-    const suffix = details.length > 0 ? ` · ${details.join(" · ")}` : "";
-    const gap = entry.status === "running" ? "  " : " ";
-    return `${swarmRowSymbol(entry.status)}${gap}${item}${suffix}`;
-  });
-  const hiddenQueued = total - settled - running;
-  if (hiddenQueued > 0) rows.push(`· +${hiddenQueued} queued`);
-  return { title: titleParts.join(" — "), rows };
+  const total = entries.length;
+  const idWidth = Math.max(3, String(Math.max(1, total)).length);
+
+  // 标题：─ Agent Swarm ─ description ───────
+  const head = "Agent Swarm";
+  const desc = input.description.length > 0 ? ` ─ ${input.description}` : "";
+  const used = head.length + desc.length + 2;
+  const tail = "─".repeat(Math.max(1, BOARD_WIDTH - used - 1));
+  const title = `${head}${desc} ${tail}`.slice(0, BOARD_WIDTH);
+
+  // 网格行
+  const rows: string[] = [];
+  for (let i = 0; i < entries.length; i += CELL_COLUMNS) {
+    const cells: string[] = [];
+    for (let col = 0; col < CELL_COLUMNS && i + col < entries.length; col += 1) {
+      const entry = entries[i + col]!;
+      const id = String(i + col + 1).padStart(idWidth, "0");
+      const settledCell = entry.status === "done" || entry.status === "failed";
+      const bar = brailleBar(entry.ticks, settledCell);
+      const mark = cellLabel(entry);
+      cells.push(padCell(`${id} [${bar}] ${mark}`));
+    }
+    rows.push(cells.join(CELL_GAP));
+  }
+
+  // 底部 pip 状态条
+  let statusLabel: string;
+  if (total > 0 && settled === total) {
+    statusLabel = failed > 0 ? `✗ Failed. (${done}/${total})` : `✓ Completed. (${total}/${total})`;
+  } else if (running > 0) {
+    statusLabel = `⠋ Working… (${settled}/${total})`;
+  } else {
+    statusLabel = `Queued… (${total})`;
+  }
+  const filled = total === 0 ? 0 : Math.round((settled / total) * PIP_WIDTH);
+  const pip = `${PIP_FILLED.repeat(filled)}${PIP_EMPTY.repeat(Math.max(0, PIP_WIDTH - filled))}`;
+  rows.push(`${statusLabel} ${pip}`);
+
+  return { title, rows };
 }

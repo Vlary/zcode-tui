@@ -341,16 +341,19 @@ function agentSwarmProjection(record: Record<string, unknown>): ToolTranscriptIn
       ? record["description"]
       : undefined;
   const total = items.length + resumeCount;
-  // 与运行期进度板同款布局；首个 progress 事件到达后由动态板接管。
-  const detailLines: string[] = [];
-  if (description !== undefined) detailLines.push(description);
-  for (const item of items.slice(0, 4)) {
-    detailLines.push(`· ${truncateDisplay(String(item), MAX_DETAIL_WIDTH - 2)}`);
-  }
-  if (items.length > 4) detailLines.push(`· +${items.length - 4} more`);
-  if (resumeCount > 0) detailLines.push(`⠏ resume ${resumeCount} agent(s)`);
+  // 与运行期进度板同款线框；首个 progress 事件到达后由动态板接管。
+  const head = "Agent Swarm";
+  const desc = description === undefined ? "" : ` ─ ${description}`;
+  const idWidth = Math.max(3, String(Math.max(1, total)).length);
+  const rows = [
+    ...items.map((item) => `· ${truncateDisplay(String(item), 34)}`),
+    ...Array.from({ length: resumeCount }, () => "⠏ resume"),
+  ];
+  const detailLines = rows.map((row, i) => `${String(i + 1).padStart(idWidth, "0")} [⣀⣀⣀⣀] ${row}`);
+  const used = head.length + desc.length + 2;
+  const tail = "─".repeat(Math.max(1, 88 - used - 1));
   return {
-    title: description === undefined ? `swarm — ${total} subagents` : `swarm · ${description} — ${total} subagents`,
+    title: `${head}${desc} ${tail}`.slice(0, 88),
     detailLines,
   };
 }

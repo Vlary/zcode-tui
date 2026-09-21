@@ -62,6 +62,7 @@ export async function runSwarmPool(
   const board = specs.map<SwarmProgressEntry>((spec) => ({
     item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
     status: "queued",
+    ticks: 0,
   }));
   const reportProgress = (): void => {
     options.onProgress?.(board.map((entry) => ({ ...entry })));
@@ -156,7 +157,23 @@ export async function runSwarmPool(
       results[index] = await runOne(specs[index]!, index);
     }
   });
-  await Promise.all(workers);
+  // Kimi 同款呼吸感：running cell 的 braille 条随时间漂移（简化估算器：每帧 +2）。
+  const animator = setInterval(() => {
+    let animated = false;
+    for (const entry of board) {
+      if (entry.status === "running") {
+        entry.ticks += 2;
+        animated = true;
+      }
+    }
+    if (animated) reportProgress();
+  }, 800);
+  if (typeof animator === "object" && "unref" in animator) animator.unref();
+  try {
+    await Promise.all(workers);
+  } finally {
+    clearInterval(animator);
+  }
   return results;
 }
 

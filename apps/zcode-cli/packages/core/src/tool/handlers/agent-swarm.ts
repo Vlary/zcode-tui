@@ -253,12 +253,14 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
         ? {
             item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
             status: "done" as const,
+            ticks: 0,
             durationMs: entry.totalDurationMs,
             totalTokens: entry.totalTokens,
           }
         : {
             item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
             status: "failed" as const,
+            ticks: 0,
             durationMs: entry.totalDurationMs,
           };
     }),
