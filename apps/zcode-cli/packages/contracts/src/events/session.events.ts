@@ -852,6 +852,11 @@ export interface ToolCallProgressPayload {
   outputPreview?: ExecutionOutputPreview;
   stdoutTail?: string;
   stderrTail?: string;
+  /** AgentSwarm 实时进度：TUI 据此刷新工具卡片标题与子代理状态行。 */
+  swarmProgress?: {
+    title: string;
+    rows: string[];
+  };
 }
 
 export interface ToolCallResultPayload {

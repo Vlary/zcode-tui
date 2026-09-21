@@ -103,3 +103,72 @@ export function formatAgentSwarmOutputForModel(output: unknown): string {
   lines.push("</agent_swarm_result>");
   return lines.join("\n");
 }
+
+// ============================================================
+// AgentSwarm 实时进度板：handler 在子代理状态变化时渲染 title+rows，
+// 经 ToolCallProgress 事件送达 TUI 刷新工具卡片。
+// ============================================================
+
+export interface SwarmProgressEntry {
+  item: string;
+  status: "queued" | "running" | "done" | "failed";
+  durationMs?: number;
+  totalTokens?: number;
+}
+
+const SWARM_ROW_LIMIT = 8;
+const SWARM_ITEM_WIDTH = 42;
+
+function swarmRowSymbol(status: SwarmProgressEntry["status"]): string {
+  if (status === "done") return "✓";
+  if (status === "failed") return "✗";
+  if (status === "running") return "⠏";
+  return "·";
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k tok`;
+  return `${tokens} tok`;
+}
+
+export function renderSwarmProgress(input: {
+  description: string;
+  entries: readonly SwarmProgressEntry[];
+}): { title: string; rows: string[] } {
+  const done = input.entries.filter((entry) => entry.status === "done").length;
+  const failed = input.entries.filter((entry) => entry.status === "failed").length;
+  const settled = done + failed;
+  const total = input.entries.length;
+  const running = input.entries.filter((entry) => entry.status === "running").length;
+  const titleParts = [
+    `swarm · ${input.description}`,
+    settled >= total
+      ? `${settled}/${total} complete${failed > 0 ? `, ${failed} failed` : ""}`
+      : `${settled}/${total} done · ${running} running`,
+  ];
+  const visible = input.entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry.status !== "queued")
+    .slice(-SWARM_ROW_LIMIT);
+  const rows = visible.map(({ entry }) => {
+    const item = entry.item.length > SWARM_ITEM_WIDTH
+      ? `${entry.item.slice(0, SWARM_ITEM_WIDTH - 1)}…`
+      : entry.item;
+    const details: string[] = [];
+    if (entry.durationMs !== undefined) details.push(formatDuration(entry.durationMs));
+    if (entry.totalTokens !== undefined) details.push(formatTokens(entry.totalTokens));
+    if (entry.status === "failed") details.push("failed");
+    const suffix = details.length > 0 ? ` · ${details.join(" · ")}` : "";
+    const gap = entry.status === "running" ? "  " : " ";
+    return `${swarmRowSymbol(entry.status)}${gap}${item}${suffix}`;
+  });
+  const hiddenQueued = total - settled - running;
+  if (hiddenQueued > 0) rows.push(`· +${hiddenQueued} queued`);
+  return { title: titleParts.join(" — "), rows };
+}

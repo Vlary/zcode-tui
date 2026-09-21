@@ -56,12 +56,21 @@ export function applyToolTranscriptEvent(
     event.type === SessionEventType.ToolCallStarted ||
     event.type === SessionEventType.ToolCallProgress
   ) {
+    // AgentSwarm 的实时进度板：handler 渲染好的 title+rows 直接替换工具卡片内容。
+    const swarm = asRecord(payload.swarmProgress);
+    const swarmTitle = swarm === null ? undefined : stringField(swarm, "title");
+    const swarmRows = Array.isArray(swarm?.rows) ? swarm?.rows : undefined;
     handlers.setMessages((current) =>
       updateOrAppendToolPart(
         current,
         toolCallId,
         toolName,
-        { status: "running" },
+        {
+          status: "running",
+          ...(swarmTitle !== undefined && swarmTitle.length > 0
+            ? { title: swarmTitle, detailLines: (swarmRows ?? []) as string[] }
+            : {}),
+        },
         assistantMessageId,
       ),
     );
@@ -327,21 +336,21 @@ function agentSwarmProjection(record: Record<string, unknown>): ToolTranscriptIn
   const items = Array.isArray(record["items"]) ? (record["items"] as unknown[]) : [];
   const resumeIds = asRecord(record["resume_agent_ids"]);
   const resumeCount = resumeIds ? Object.keys(resumeIds).length : 0;
-  const template =
-    typeof record["prompt_template"] === "string" && record["prompt_template"].length > 0
-      ? record["prompt_template"]
+  const description =
+    typeof record["description"] === "string" && record["description"].length > 0
+      ? record["description"]
       : undefined;
-  const detailLines = compactLines([
-    fieldLine(record, "description"),
-    template === undefined ? undefined : `template: ${truncateDisplay(template, MAX_DETAIL_WIDTH - 10)}`,
-  ]);
-  for (const item of items.slice(0, 3)) {
+  const total = items.length + resumeCount;
+  // 与运行期进度板同款布局；首个 progress 事件到达后由动态板接管。
+  const detailLines: string[] = [];
+  if (description !== undefined) detailLines.push(description);
+  for (const item of items.slice(0, 4)) {
     detailLines.push(`· ${truncateDisplay(String(item), MAX_DETAIL_WIDTH - 2)}`);
   }
-  if (items.length > 3) detailLines.push(`… +${items.length - 3} more`);
-  if (resumeCount > 0) detailLines.push(`resume: ${resumeCount} agent(s)`);
+  if (items.length > 4) detailLines.push(`· +${items.length - 4} more`);
+  if (resumeCount > 0) detailLines.push(`⠏ resume ${resumeCount} agent(s)`);
   return {
-    title: `swarm (${items.length + resumeCount} subagents)`,
+    title: description === undefined ? `swarm — ${total} subagents` : `swarm · ${description} — ${total} subagents`,
     detailLines,
   };
 }

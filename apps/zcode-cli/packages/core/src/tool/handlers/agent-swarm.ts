@@ -13,26 +13,25 @@
 // - 限速识别与指数退避重排队（3s 基数、2 倍率、60s 封顶、至多 3 次）；
 // - 启动节流：前 5 个子代理按 700ms 间隔放行，避免瞬时打爆 provider。
 
+import { randomUUID } from "node:crypto";
 import {
   AgentErrorCode,
+  SessionEventType,
   AgentSwarmInputJsonSchema,
   AgentSwarmInputSchema,
   CoreErrorType,
   createCoreError,
-  DEFAULT_SWARM_TASK_TIMEOUT_MS,
   MAX_AGENT_SWARM_SUBAGENTS,
   PROMPT_TEMPLATE_PLACEHOLDER,
-  SWARM_RATE_LIMIT_MAX_RETRIES,
-  SWARM_RATE_LIMIT_RETRY_BASE_MS,
-  SWARM_RATE_LIMIT_RETRY_MAX_MS,
-  type AgentOutput,
   type AgentSwarmInput,
   type AgentSwarmOutput,
-  type AgentSwarmSubagentResult,
   type TraceContext,
 } from "@zcode/contracts";
 import type { ToolEntry, ToolHandler } from "../types.js";
+import { runSwarmPool, type SwarmEngineOptions, type SwarmEnginePorts } from "./agent-swarm-pool.js";
 import {
+  renderSwarmProgress,
+  type SwarmProgressEntry,
   AGENT_SWARM_DESCRIPTION,
   AGENT_SWARM_OUTPUT_SCHEMA,
   formatAgentSwarmOutputForModel,
@@ -41,9 +40,9 @@ import {
 
 const DEFAULT_SWARM_CONCURRENCY = 8;
 const MAX_SWARM_CONCURRENCY = 32;
-const INITIAL_LAUNCH_LIMIT = 5;
-const INITIAL_LAUNCH_INTERVAL_MS = 700;
-const RATE_LIMIT_PATTERN = /rate.?limit|too many requests|429|resource_exhaust|quota/i;
+
+
+
 
 function resolveSwarmConcurrency(env: NodeJS.ProcessEnv): number {
   const raw = Number.parseInt(env["ZCODE_SWARM_MAX_CONCURRENCY"] ?? "", 10);
@@ -51,27 +50,13 @@ function resolveSwarmConcurrency(env: NodeJS.ProcessEnv): number {
   return Math.min(raw, MAX_SWARM_CONCURRENCY);
 }
 
-function resolveSwarmTaskTimeoutMs(env: NodeJS.ProcessEnv): number {
-  const raw = Number.parseInt(env["ZCODE_SWARM_TIMEOUT_MS"] ?? "", 10);
-  if (!Number.isInteger(raw) || raw <= 0) return DEFAULT_SWARM_TASK_TIMEOUT_MS;
-  return raw;
-}
 
-function isRateLimitError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  if (RATE_LIMIT_PATTERN.test(error.message)) return true;
-  const cause = (error as { cause?: unknown }).cause;
-  return cause instanceof Error && RATE_LIMIT_PATTERN.test(cause.message);
-}
 
-class SwarmTaskTimeoutError extends Error {
-  constructor() {
-    super("Swarm subagent timed out.");
-    this.name = "SwarmTaskTimeoutError";
-  }
-}
 
-interface SwarmItemSpec {
+
+
+
+export interface SwarmItemSpec {
   item: string;
   prompt: string;
   index: number;
@@ -140,108 +125,6 @@ function expandSwarmItems(input: AgentSwarmInput): SwarmItemSpec[] {
   return specs;
 }
 
-interface SwarmEngineOptions {
-  agentType: string;
-  concurrency: number;
-  env: NodeJS.ProcessEnv;
-  parentToolCallId: string;
-  sleep: (ms: number) => Promise<void>;
-}
-
-interface SwarmEnginePorts {
-  launch: (spec: SwarmItemSpec, signal: AbortSignal) => Promise<AgentOutput>;
-  resume: (spec: SwarmItemSpec, signal: AbortSignal) => Promise<AgentOutput>;
-}
-
-/** 固定并发上限的有序池：结果按下标落位，先完成的 worker 立即取下一个任务。 */
-async function runSwarmPool(
-  specs: readonly SwarmItemSpec[],
-  options: SwarmEngineOptions,
-  ports: SwarmEnginePorts,
-): Promise<AgentSwarmSubagentResult[]> {
-  const results: AgentSwarmSubagentResult[] = Array.from({ length: specs.length });
-  let next = 0;
-  let launched = 0;
-  const workerCount = Math.max(1, Math.min(options.concurrency, specs.length));
-  const timeoutMs = resolveSwarmTaskTimeoutMs(options.env);
-
-  const runOne = async (spec: SwarmItemSpec): Promise<AgentSwarmSubagentResult> => {
-    const controller = new AbortController();
-    // 引擎层超时：即使底层调用不响应 abort 信号，也按 deadline 强制归类 timeout。
-    let deadline: ReturnType<typeof setTimeout> | undefined;
-    const timeoutRace = new Promise<never>((_, reject) => {
-      deadline = setTimeout(() => {
-        const error = new SwarmTaskTimeoutError();
-        controller.abort(error);
-        reject(error);
-      }, timeoutMs);
-    });
-    const startedAt = Date.now();
-    try {
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          const run =
-            spec.resumeAgentId === undefined
-              ? ports.launch(spec, controller.signal)
-              : ports.resume(spec, controller.signal);
-          const output = await Promise.race([run, timeoutRace]);
-          if (output.status !== "completed") {
-            return {
-              item: spec.item,
-              agentId: output.agentId,
-              outcome: "failed",
-              error: "backgrounded",
-            };
-          }
-          return {
-            item: spec.item,
-            agentId: output.agentId,
-            outcome: "completed",
-            text: output.content.map((block) => block.text).join("\n"),
-            totalTokens: output.totalTokens,
-            totalToolUseCount: output.totalToolUseCount,
-            totalDurationMs: Date.now() - startedAt,
-          };
-        } catch (error) {
-          if (controller.signal.aborted) throw controller.signal.reason ?? error;
-          if (attempt >= SWARM_RATE_LIMIT_MAX_RETRIES || !isRateLimitError(error)) throw error;
-          const delay = Math.min(
-            SWARM_RATE_LIMIT_RETRY_BASE_MS * 2 ** attempt,
-            SWARM_RATE_LIMIT_RETRY_MAX_MS,
-          );
-          await options.sleep(delay);
-        }
-      }
-    } catch (error) {
-      const timedOut =
-        error instanceof SwarmTaskTimeoutError ||
-        controller.signal.reason instanceof SwarmTaskTimeoutError;
-      return {
-        item: spec.item,
-        outcome: "failed",
-        error: error instanceof Error ? error.message : String(error),
-        ...(timedOut ? { stopReason: "timeout" as const } : {}),
-      };
-    } finally {
-      clearTimeout(deadline);
-    }
-  };
-
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (next < specs.length) {
-      const index = next++;
-      // 启动节流：前 INITIAL_LAUNCH_LIMIT 个子代理按固定间隔放行。
-      if (launched < INITIAL_LAUNCH_LIMIT && launched > 0) {
-        await options.sleep(INITIAL_LAUNCH_INTERVAL_MS);
-      }
-      launched += 1;
-      results[index] = await runOne(specs[index]!);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
 const agentSwarmHandler: ToolHandler = async (input, context) => {
   const parsed = AgentSwarmInputSchema.parse(input) as AgentSwarmInput;
 
@@ -271,12 +154,34 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
     );
   }
 
+  const emitSwarmProgress = (entries: readonly SwarmProgressEntry[]): void => {
+    if (!context.emitEvent) return;
+    const view = renderSwarmProgress({ description: parsed.description, entries });
+    void context
+      .emitEvent({
+        id: randomUUID() as never,
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        type: SessionEventType.ToolCallProgress,
+        timestamp: Date.now(),
+        traceId: context.traceId,
+        sequenceNumber: 0,
+        payload: {
+          toolCallId: context.toolCallId,
+          toolName: "AgentSwarm",
+          swarmProgress: view,
+        },
+      } as never)
+      .catch(() => undefined);
+  };
+
   const engineOptions: SwarmEngineOptions = {
     agentType: parsed.subagent_type ?? "general-purpose",
     concurrency: resolveSwarmConcurrency(process.env),
     env: process.env,
     parentToolCallId: context.toolCallId,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    onProgress: emitSwarmProgress,
   };
   const traceContext: TraceContext = {
     traceId: context.traceId,
@@ -341,6 +246,23 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
   };
 
   const subagents = await runSwarmPool(specs, engineOptions, ports);
+  emitSwarmProgress(
+    specs.map((spec, index) => {
+      const entry = subagents[index]!;
+      return entry.outcome === "completed"
+        ? {
+            item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
+            status: "done" as const,
+            durationMs: entry.totalDurationMs,
+            totalTokens: entry.totalTokens,
+          }
+        : {
+            item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
+            status: "failed" as const,
+            durationMs: entry.totalDurationMs,
+          };
+    }),
+  );
 
   const output: AgentSwarmOutput = {
     status: "completed",
