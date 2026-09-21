@@ -4,6 +4,7 @@ import { ShikiDiffView, diffViewForWidth } from "./app-shiki-diff-view.js";
 import { palette } from "./app-model.js";
 import { truncateDisplay } from "./app-terminal-width.js";
 import { activeTuiTheme } from "./theme/index.js";
+import { AgentSwarmBoardView } from "./app-tool-swarm-board.js";
 
 const MAX_OUTPUT_LINES = 8;
 const OUTPUT_LINE_INDENT_WIDTH = 4;
@@ -26,6 +27,10 @@ export function ToolTranscriptPartView({
   const statusColor = colorForStatus(part.status);
   const title = part.title ?? `Tool ${part.toolName} ${part.status}`;
   const outputLines = part.output ? restoredOutputLines(part.output, terminalWidth) : [];
+  // AgentSwarm 走专用富文本板面：渐变标题 + 自适应网格 + 分段状态条。
+  if (part.swarmBoard) {
+    return h(AgentSwarmBoardView, { board: part.swarmBoard, terminalWidth });
+  }
   // tool rows should align with assistant text; child detail rows carry their own indent.
   return h(
     "box",

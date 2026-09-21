@@ -5,6 +5,12 @@ import { formatFileDiffDisplay } from "./app-tool-diff-display.js";
 import { formatToolFilePath } from "./app-tool-path-display.js";
 import { truncateDisplay } from "./app-terminal-width.js";
 import { asRecord, booleanField, stringField } from "./state.js";
+import {
+  agentSwarmProjection,
+  swarmBoardFromPayload,
+  swarmRowsFromPayload,
+  swarmTitleFromPayload,
+} from "./app-tool-swarm-payload.js";
 
 const MAX_DETAIL_LINES = 4;
 const MAX_DETAIL_WIDTH = 100;
@@ -20,7 +26,7 @@ type ToolTranscriptHandlers = {
   workspaceDirectory?: string;
 };
 
-type ToolTranscriptInputProjection = {
+export type ToolTranscriptInputProjection = {
   detailLines: string[];
   title?: string;
 };
@@ -56,10 +62,10 @@ export function applyToolTranscriptEvent(
     event.type === SessionEventType.ToolCallStarted ||
     event.type === SessionEventType.ToolCallProgress
   ) {
-    // AgentSwarm 的实时进度板：handler 渲染好的 title+rows 直接替换工具卡片内容。
-    const swarm = asRecord(payload.swarmProgress);
-    const swarmTitle = swarm === null ? undefined : stringField(swarm, "title");
-    const swarmRows = Array.isArray(swarm?.rows) ? swarm?.rows : undefined;
+    // AgentSwarm 的实时进度板：结构化 board 交给专用视图，title+rows 作纯文本后备。
+    const swarmTitle = swarmTitleFromPayload(payload);
+    const swarmRows = swarmRowsFromPayload(payload);
+    const swarmBoard = swarmBoardFromPayload(payload);
     handlers.setMessages((current) =>
       updateOrAppendToolPart(
         current,
@@ -67,9 +73,10 @@ export function applyToolTranscriptEvent(
         toolName,
         {
           status: "running",
-          ...(swarmTitle !== undefined && swarmTitle.length > 0
-            ? { title: swarmTitle, detailLines: (swarmRows ?? []) as string[] }
+          ...(swarmTitle !== undefined
+            ? { title: swarmTitle, detailLines: swarmRows ?? [] }
             : {}),
+          ...(swarmBoard === undefined ? {} : { swarmBoard }),
         },
         assistantMessageId,
       ),
@@ -330,32 +337,6 @@ function agentDetails(record: Record<string, unknown>): string[] {
     booleanField(record, "run_in_background") ? "background: true" : undefined,
     previewLine(record, "prompt"),
   ]);
-}
-
-function agentSwarmProjection(record: Record<string, unknown>): ToolTranscriptInputProjection {
-  const items = Array.isArray(record["items"]) ? (record["items"] as unknown[]) : [];
-  const resumeIds = asRecord(record["resume_agent_ids"]);
-  const resumeCount = resumeIds ? Object.keys(resumeIds).length : 0;
-  const description =
-    typeof record["description"] === "string" && record["description"].length > 0
-      ? record["description"]
-      : undefined;
-  const total = items.length + resumeCount;
-  // 与运行期进度板同款线框；首个 progress 事件到达后由动态板接管。
-  const head = "Agent Swarm";
-  const desc = description === undefined ? "" : ` ─ ${description}`;
-  const idWidth = Math.max(3, String(Math.max(1, total)).length);
-  const rows = [
-    ...items.map((item) => `· ${truncateDisplay(String(item), 34)}`),
-    ...Array.from({ length: resumeCount }, () => "⠏ resume"),
-  ];
-  const detailLines = rows.map((row, i) => `${String(i + 1).padStart(idWidth, "0")} [⣀⣀⣀⣀] ${row}`);
-  const used = head.length + desc.length + 2;
-  const tail = "─".repeat(Math.max(1, 88 - used - 1));
-  return {
-    title: `${head}${desc} ${tail}`.slice(0, 88),
-    detailLines,
-  };
 }
 
 function genericInputDetails(record: Record<string, unknown>): string[] {

@@ -63,6 +63,8 @@ export type ToolTranscriptPart = {
   error?: string;
   output?: string;
   resultDisplay?: ToolResultDisplay;
+  /** AgentSwarm 专用富文本板面；存在时工具视图改用 AgentSwarmBoardView 渲染。 */
+  swarmBoard?: import("@zcode/contracts").SwarmProgressBoard;
   status: "pending" | "running" | "completed" | "failed";
   title?: string;
   toolCallId: string;

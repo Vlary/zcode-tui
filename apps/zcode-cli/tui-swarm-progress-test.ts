@@ -57,6 +57,17 @@ applyToolTranscriptEvent(
     swarmProgress: {
       title: "Agent Swarm ─ review ── 1/2 done",
       rows: ["✓ #1 x · 3.2s · 1.1k tok", "⠏ #2 y"],
+      board: {
+        description: "review",
+        total: 2,
+        done: 1,
+        failed: 0,
+        running: 1,
+        entries: [
+          { index: 1, status: "done", ticks: 28, item: "x", tokens: 1100 },
+          { index: 2, status: "running", ticks: 5, item: "y" },
+        ],
+      },
     },
   }),
   handlers,
@@ -71,6 +82,12 @@ assert(
   JSON.stringify(dynamic.detailLines),
 );
 assert("status running", dynamic.status === "running");
+const boardPart = part as unknown as { swarmBoard?: { total: number; done: number; entries: unknown[] } };
+assert(
+  "structured board attached",
+  boardPart.swarmBoard?.total === 2 && boardPart.swarmBoard.done === 1 && boardPart.swarmBoard.entries?.length === 2,
+  JSON.stringify(boardPart.swarmBoard),
+);
 
 applyToolTranscriptEvent(
   mkEvent(SessionEventType.ToolCallResult, { toolName: "AgentSwarm", result: {}, duration: 4200 }),

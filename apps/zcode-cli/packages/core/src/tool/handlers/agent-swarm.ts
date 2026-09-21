@@ -170,7 +170,7 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
           toolCallId: context.toolCallId,
           toolName: "AgentSwarm",
           swarmProgress: view,
-        },
+        } as never,
       } as never)
       .catch(() => undefined);
   };

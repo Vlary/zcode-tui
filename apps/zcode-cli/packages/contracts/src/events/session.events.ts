@@ -856,7 +856,25 @@ export interface ToolCallProgressPayload {
   swarmProgress?: {
     title: string;
     rows: string[];
+    /** 结构化板面数据：TUI 专用视图按宽度与主题做渐变标题和自适应网格。 */
+    board?: SwarmProgressBoard;
   };
+}
+
+/** AgentSwarm 板面的结构化投影，供富文本视图布局。 */
+export interface SwarmProgressBoard {
+  description: string;
+  total: number;
+  done: number;
+  failed: number;
+  running: number;
+  entries: ReadonlyArray<{
+    index: number;
+    status: "queued" | "running" | "done" | "failed";
+    ticks: number;
+    item: string;
+    tokens?: number;
+  }>;
 }
 
 export interface ToolCallResultPayload {

@@ -6,6 +6,7 @@
 
 import {
   PROMPT_TEMPLATE_PLACEHOLDER,
+  type SwarmProgressBoard,
   type AgentSwarmOutput,
 } from "@zcode/contracts";
 
@@ -173,7 +174,7 @@ function formatTokens(tokens: number): string {
 export function renderSwarmProgress(input: {
   description: string;
   entries: readonly SwarmProgressEntry[];
-}): { title: string; rows: string[] } {
+}): { title: string; rows: string[]; board: SwarmProgressBoard } {
   const entries = input.entries;
   const done = entries.filter((e) => e.status === "done").length;
   const failed = entries.filter((e) => e.status === "failed").length;
@@ -217,5 +218,22 @@ export function renderSwarmProgress(input: {
   const pip = `${PIP_FILLED.repeat(filled)}${PIP_EMPTY.repeat(Math.max(0, PIP_WIDTH - filled))}`;
   rows.push(`${statusLabel} ${pip}`);
 
-  return { title, rows };
+  return {
+    title,
+    rows,
+    board: {
+      description: input.description,
+      total,
+      done,
+      failed,
+      running,
+      entries: entries.map((entry, position) => ({
+        index: position + 1,
+        status: entry.status,
+        ticks: entry.ticks,
+        item: entry.item,
+        ...(entry.totalTokens === undefined ? {} : { tokens: entry.totalTokens }),
+      })),
+    },
+  };
 }
