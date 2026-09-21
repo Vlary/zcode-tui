@@ -1,5 +1,7 @@
 # zcode-tui
 
+![zcode TUI](screenshots/tui-main.png)
+
 基于 [zai-org/ZCode](https://github.com/zai-org/ZCode) 的 **TUI / CLI 定制版**：只关心终端里的 `zcode`——Agent CLI、全屏 TUI、子代理与多智能体编排。不涉及桌面端与 Web 端的定制开发（上游源码保留，构建链完整）。
 
 相对上游新增 / 修改的内容：
