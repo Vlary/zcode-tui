@@ -50,7 +50,7 @@ const board = {
     { index: 1, status: "done" as const, ticks: 28, item: "src/a.ts", tokens: 1200 },
     { index: 2, status: "done" as const, ticks: 28, item: "src/b.ts", tokens: 900 },
     { index: 3, status: "running" as const, ticks: 9, item: "src/c.ts" },
-    { index: 4, status: "queued" as const, ticks: 0, item: "src/d.ts" },
+    { index: 4, status: "suspended" as const, ticks: 3, item: "src/d.ts" },
     { index: 5, status: "queued" as const, ticks: 0, item: "src/e.ts" },
     { index: 6, status: "failed" as const, ticks: 0, item: "src/f.ts" },
   ],
@@ -110,7 +110,7 @@ const assert = (label: string, ok: boolean, detail?: string) => {
 {
   const view = AgentSwarmBoardView({ board, terminalWidth: 100 });
   const joined = collectTexts(view).map((t) => t.text).join("");
-  assert("cell states rendered", joined.includes("✓ src/a.ts") && joined.includes("✗ src/f.ts") && joined.includes("⠋ src/c.ts") && joined.includes("Queued…"));
+  assert("cell states rendered", joined.includes("✓ src/a.ts") && joined.includes("✗ src/f.ts") && joined.includes("⠋ src/c.ts") && joined.includes("Rate limited…") && joined.includes("Queued…"));
 }
 
 console.log(fail === 0 ? "=== VIEW PASS ===" : `=== VIEW FAIL ${fail} ===`);

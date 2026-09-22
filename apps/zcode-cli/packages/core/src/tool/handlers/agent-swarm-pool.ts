@@ -121,11 +121,15 @@ export async function runSwarmPool(
         } catch (error) {
           if (controller.signal.aborted) throw controller.signal.reason ?? error;
           if (attempt >= SWARM_RATE_LIMIT_MAX_RETRIES || !isRateLimitError(error)) throw error;
+          board[index]!.status = "suspended";
+          reportProgress();
           const delay = Math.min(
             SWARM_RATE_LIMIT_RETRY_BASE_MS * 2 ** attempt,
             SWARM_RATE_LIMIT_RETRY_MAX_MS,
           );
           await options.sleep(delay);
+          board[index]!.status = "running";
+          reportProgress();
         }
       }
     } catch (error) {

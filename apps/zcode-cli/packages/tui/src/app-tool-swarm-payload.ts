@@ -20,13 +20,16 @@ export function swarmBoardFromPayload(payload: Record<string, unknown>): SwarmPr
     running: numberField(board, "running") ?? 0,
     entries: entriesRaw.map((entry, position) => {
       const record = asRecord(entry);
-      const status = stringField(record, "status");
+      const rawStatus = stringField(record, "status");
       const tokens = numberField(record, "tokens");
       return {
         index: numberField(record, "index") ?? position + 1,
         status:
-          status === "running" || status === "done" || status === "failed"
-            ? status
+          rawStatus === "running" ||
+          rawStatus === "done" ||
+          rawStatus === "failed" ||
+          rawStatus === "suspended"
+            ? rawStatus
             : ("queued" as const),
         ticks: numberField(record, "ticks") ?? 0,
         item: stringField(record, "item") ?? "",

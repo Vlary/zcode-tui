@@ -870,7 +870,7 @@ export interface SwarmProgressBoard {
   running: number;
   entries: ReadonlyArray<{
     index: number;
-    status: "queued" | "running" | "done" | "failed";
+    status: "queued" | "running" | "suspended" | "done" | "failed";
     ticks: number;
     item: string;
     tokens?: number;

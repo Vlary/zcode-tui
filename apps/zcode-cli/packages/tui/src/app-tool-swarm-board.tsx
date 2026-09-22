@@ -112,6 +112,7 @@ function cellStatusLabel(
   }
   if (entry.status === "failed") return { text: `✗ ${entry.item}`, color: colors.error };
   if (entry.status === "running") return { text: `⠋ ${entry.item}`, color: colors.text };
+  if (entry.status === "suspended") return { text: "⠏ Rate limited…", color: colors.warning };
   return { text: "Queued…", color: colors.textMuted };
 }
 
@@ -147,6 +148,8 @@ export function AgentSwarmBoardView({
 
   const rows: React.ReactElement[] = [];
   const visible = board.entries;
+  // 极窄终端的紧凑降级：cell 只剩 序号+[bar]+标记（Kimi 的 compact cell）。
+  const compact = width < 52;
   for (let start = 0; start < visible.length; start += columns) {
     const cells: React.ReactElement[] = [];
     for (let col = 0; col < columns && start + col < visible.length; col += 1) {
@@ -156,24 +159,55 @@ export function AgentSwarmBoardView({
       const barColor =
         entry.status === "failed"
           ? colors.error
-          : settled || entry.status === "running"
-            ? colors.success
-            : colors.textMuted;
+          : entry.status === "suspended"
+            ? colors.warning
+            : settled || entry.status === "running"
+              ? colors.success
+              : colors.textMuted;
+      // Kimi failedBrailleBar：失败格红色只点亮前段，空段用暗化占位。
+      const failedDark = lerpColor(colors.error, colors.textMuted, 0.55);
+      const mark =
+        entry.status === "done"
+          ? "✓"
+          : entry.status === "failed"
+            ? "✗"
+            : entry.status === "running"
+              ? "⠋"
+              : entry.status === "suspended"
+                ? "⠏"
+                : "·";
+      const markColor =
+        entry.status === "done"
+          ? colors.success
+          : entry.status === "failed"
+            ? colors.error
+            : entry.status === "suspended"
+              ? colors.warning
+              : colors.textMuted;
       const label = cellStatusLabel(entry, colors);
-      const labelWidth = Math.max(1, CELL_WIDTH - idWidth - BAR_CELLS - 6);
+      const barText = brailleBarText(entry.ticks, settled);
+      const barRuns =
+        entry.status === "failed" && barText.length > 0
+          ? [
+              h("text", { style: { fg: colors.error } }, barText.slice(0, 2)),
+              h("text", { style: { fg: failedDark } }, barText.slice(2)),
+            ]
+          : [h("text", { style: { fg: barColor } }, barText)];
       cells.push(
         h(
           "box",
           { key: `c-${entry.index}`, style: { flexDirection: "row", marginRight: CELL_GAP } },
           h("text", { style: { fg: colors.primary } }, `${id} `),
           h("text", { style: { fg: colors.textMuted } }, "["),
-          h("text", { style: { fg: barColor } }, brailleBarText(entry.ticks, settled)),
+          ...barRuns,
           h("text", { style: { fg: colors.textMuted } }, "] "),
-          h(
-            "text",
-            { style: { fg: label.color } },
-            truncateDisplay(label.text, labelWidth),
-          ),
+          compact
+            ? h("text", { style: { fg: markColor } }, mark)
+            : h(
+                "text",
+                { style: { fg: label.color } },
+                truncateDisplay(label.text, Math.max(1, CELL_WIDTH - idWidth - BAR_CELLS - 6)),
+              ),
         ),
       );
     }
@@ -191,7 +225,9 @@ export function AgentSwarmBoardView({
         : `✓ Completed. (${board.total}/${board.total})`
       : board.running > 0
         ? `⠋ Working… (${settled}/${board.total})`
-        : `Queued… (${board.total})`;
+        : board.total > 0 && board.done + board.failed + board.running === 0
+          ? `⏸ Rate limited… (${settled}/${board.total})`
+          : `Queued… (${board.total})`;
   const statusColor =
     board.total > 0 && settled === board.total
       ? board.failed > 0

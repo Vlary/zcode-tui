@@ -117,7 +117,7 @@ export function formatAgentSwarmOutputForModel(output: unknown): string {
 
 export interface SwarmProgressEntry {
   item: string;
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "suspended" | "done" | "failed";
   ticks: number;
   durationMs?: number;
   totalTokens?: number;
@@ -160,6 +160,7 @@ function cellLabel(entry: SwarmProgressEntry): string {
     return `✓ ${entry.item}${tokens}`;
   }
   if (entry.status === "running") return `⠋ ${entry.item}`;
+  if (entry.status === "suspended") return "⠏ Rate limited…";
   return "Queued…";
 }
 
@@ -179,6 +180,7 @@ export function renderSwarmProgress(input: {
   const done = entries.filter((e) => e.status === "done").length;
   const failed = entries.filter((e) => e.status === "failed").length;
   const running = entries.filter((e) => e.status === "running").length;
+  const suspended = entries.filter((e) => e.status === "suspended").length;
   const settled = done + failed;
   const total = entries.length;
   const idWidth = Math.max(3, String(Math.max(1, total)).length);
@@ -209,7 +211,9 @@ export function renderSwarmProgress(input: {
   let statusLabel: string;
   if (total > 0 && settled === total) {
     statusLabel = failed > 0 ? `✗ Failed. (${done}/${total})` : `✓ Completed. (${total}/${total})`;
-  } else if (running > 0) {
+  } else if (suspended > 0 && running === 0) {
+    statusLabel = `⏸ Rate limited… (${settled}/${total})`;
+  } else if (running > 0 || suspended > 0) {
     statusLabel = `⠋ Working… (${settled}/${total})`;
   } else {
     statusLabel = `Queued… (${total})`;
@@ -226,7 +230,7 @@ export function renderSwarmProgress(input: {
       total,
       done,
       failed,
-      running,
+      running: running + suspended,
       entries: entries.map((entry, position) => ({
         index: position + 1,
         status: entry.status,
