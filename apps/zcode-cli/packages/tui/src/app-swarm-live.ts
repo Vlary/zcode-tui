@@ -143,6 +143,23 @@ export function useSwarmLiveVersion(toolCallId: string | undefined): number {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/** 活动期本地动画帧：80ms 递增（Kimi BRAILLE_SPINNER_INTERVAL_MS），终态停表。
+ *  驱动状态行 spinner 轮转与 running cell 的 braille 条漂移。 */
+const SWARM_ANIMATION_INTERVAL_MS = 80;
+
+export function useSwarmAnimationFrame(active: boolean): number {
+  const [frame, setFrame] = React.useState(0);
+  React.useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      setFrame((current) => (current + 1) % 1_000_000);
+    }, SWARM_ANIMATION_INTERVAL_MS);
+    if (typeof timer === "object" && "unref" in timer) timer.unref();
+    return () => clearInterval(timer);
+  }, [active]);
+  return active ? frame : 0;
+}
+
 /** 测试与板面终态后的清理入口。 */
 export function resetSwarmLiveState(): void {
   for (const listeners of state.listeners.values()) listeners.clear();

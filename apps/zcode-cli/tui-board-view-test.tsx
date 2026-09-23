@@ -107,14 +107,14 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   assert("wide uses multi-column", wide.length > 0 && Math.max(...wide) >= 2, JSON.stringify(wide));
 }
 
-// 3. 全宽 pip：pip 总长铺满剩余宽度（width−2−状态文本−2），3/6 → 填充与留空各半
+// 3. 全宽 pip + 统一缩进：状态行与网格行同缩进 1 空格，pip 铺满剩余宽度
 {
   const view = renderSwarmBoard({ board, terminalWidth: 100 });
   const texts = collectTexts(view);
   const pipFilled = texts.find((t) => /^━+$/.test(t.text));
   const pipEmpty = texts.find((t) => /^╌+$/.test(t.text));
-  const statusText = "⠋ Working… (3/6)";
-  const expected = 96 - 2 - statusText.length - 2;
+  const statusText = "Working… (3/6)";
+  const expected = 96 - 1 - 2 - statusText.length - 2;
   assert(
     "pip fills remaining width",
     pipFilled !== undefined &&
@@ -123,6 +123,14 @@ const assert = (label: string, ok: boolean, detail?: string) => {
     `filled=${pipFilled?.text.length} empty=${pipEmpty?.text.length} expected=${expected}`,
   );
   assert("pip ratio half", pipFilled?.text.length === Math.round((3 / 6) * expected));
+  const joinedAll = texts.map((t) => t.text).join("");
+  const firstCell = texts.find((t) => t.text.startsWith("001 "));
+  const footerText = texts.find((t) => t.text.includes(statusText));
+  assert(
+    "grid rows and status line share 1-space indent",
+    firstCell !== undefined && footerText !== undefined && footerText.text.startsWith(" "),
+    `cell0=${JSON.stringify(firstCell?.text)} footer=${JSON.stringify(footerText?.text)}`,
+  );
 }
 
 // 4. 状态语义：done 显示最终输出首段、failed 显示原因、queued 显示 item、限速标签
@@ -175,6 +183,47 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   const historyJoined = collectTexts(historyView).map((t) => t.text).join("");
   assert("history view falls back to item", historyJoined.includes("src/c.ts"));
   resetSwarmLiveState();
+}
+
+// 6. 本地动效：活动期 spinner 轮转 + running bar 漂移
+{
+  const frame0 = collectTexts(renderSwarmBoard({ board, terminalWidth: 100, frame: 0 }));
+  const frame3 = collectTexts(renderSwarmBoard({ board, terminalWidth: 100, frame: 3 }));
+  const frame5 = collectTexts(renderSwarmBoard({ board, terminalWidth: 100, frame: 5 }));
+  const joined3 = frame3.map((t) => t.text).join("");
+  assert(
+    "spinner rotates with frame (⠸ at frame 3)",
+    joined3.includes("⠸ Working…"),
+    joined3.slice(0, 120),
+  );
+  assert(
+    "spinner at frame 5 is ⠴",
+    frame5.map((t) => t.text).join("").includes("⠴ Working…"),
+  );
+  const isDriftingBar = (t: { text: string }): boolean =>
+    /^[⣀-⣿]{6,8}$/.test(t.text) && !/^⣿+$/.test(t.text) && !/^⣀+$/.test(t.text);
+  const bar0 = frame0.find(isDriftingBar)?.text;
+  const bar3 = frame3.find(isDriftingBar)?.text;
+  assert(
+    "running bar drifts with local frame",
+    bar0 !== undefined && bar3 !== undefined && bar0 !== bar3,
+    `frame0=${bar0} frame3=${bar3}`,
+  );
+  const settledBoard = {
+    ...board,
+    done: board.total,
+    failed: 0,
+    running: 0,
+    entries: board.entries.map((entry) => ({ ...entry, status: "done" as const })),
+  };
+  const settledTexts = collectTexts(
+    renderSwarmBoard({ board: settledBoard, terminalWidth: 100, frame: 9 }),
+  ).map((t) => t.text);
+  assert(
+    "settled board has no spinner prefix",
+    settledTexts.some((t) => t.includes("Completed.")) &&
+      !settledTexts.some((t) => /[⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(t)),
+  );
 }
 
 console.log(fail === 0 ? "=== VIEW PASS ===" : `=== VIEW FAIL ${fail} ===`);

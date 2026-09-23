@@ -2,7 +2,11 @@ import React from "react";
 import type { SwarmProgressBoard } from "@zcode/contracts";
 import { activeTuiTheme } from "./theme/index.js";
 import { truncateDisplay } from "./app-terminal-width.js";
-import { readSwarmLiveLine, useSwarmLiveVersion } from "./app-swarm-live.js";
+import {
+  readSwarmLiveLine,
+  useSwarmAnimationFrame,
+  useSwarmLiveVersion,
+} from "./app-swarm-live.js";
 
 // ============================================================
 // AgentSwarm 专用富文本板面（Kimi Code 同款视觉）
@@ -30,6 +34,11 @@ const BAR_MAX_CELLS = 8;
 const MIN_LABEL_WIDTH = 16;
 const BRAILLE_LEVELS = ["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"] as const;
 const BRAILLE_EMPTY = "⣀";
+// Kimi constant/rendering.ts 同款：状态行活动 spinner，80ms 一帧。
+const BRAILLE_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+const SPINNER_INTERVAL_MS = 80;
+// Kimi AGENT_SWARM_LEFT_INDENT：标题/网格/状态行统一 1 空格左缩进。
+const LEFT_INDENT = " ";
 
 interface ThemeColors {
   primary: string;
@@ -123,7 +132,8 @@ function collapseCellText(text: string): string {
   return text.replaceAll(/\s+/g, " ").trim();
 }
 
-/** 单个网格 cell：纯函数，live 文本由调用方经 readSwarmLiveLine 注入。 */
+/** 单个网格 cell：纯函数。Kimi 文本模式无独立 mark 列——终态标记并入标签，
+ *  running 只有 bar 漂移 + live 文本。frame 为本地动画帧，驱动 running bar 漂移。 */
 function renderSwarmCell(input: {
   entry: SwarmProgressBoard["entries"][number];
   id: string;
@@ -131,11 +141,10 @@ function renderSwarmCell(input: {
   labelWidth: number;
   colors: ThemeColors;
   liveLine: string;
+  frame: number;
   compact: boolean;
 }): React.ReactElement {
-  const { entry, id, barCells, labelWidth, colors, liveLine, compact } = input;
-  // 标签预算含状态标记（"✓ "/"⠋ " 各占 2 列）。
-  const textWidth = Math.max(1, labelWidth - 2);
+  const { entry, id, barCells, labelWidth, colors, liveLine, frame, compact } = input;
   const settled = entry.status === "done" || entry.status === "failed";
   const barColor =
     entry.status === "failed"
@@ -147,7 +156,9 @@ function renderSwarmCell(input: {
           : colors.textMuted;
   // Kimi failedBrailleBar：失败格红色只点亮前段，空段用暗化占位。
   const failedDark = lerpColor(colors.error, colors.textMuted, 0.55);
-  const barText = brailleBarText(entry.ticks, settled, barCells);
+  // running bar 本地漂移：core 帧 ticks 为底数，本地每 80ms +1（Kimi estimator 同观感）。
+  const effectiveTicks = entry.status === "running" ? entry.ticks + frame : entry.ticks;
+  const barText = brailleBarText(effectiveTicks, settled, barCells);
   const redCells = Math.max(1, Math.ceil(barCells / 2));
   const barRuns =
     entry.status === "failed" && barText.length > redCells
@@ -157,33 +168,25 @@ function renderSwarmCell(input: {
         ]
       : [h("text", { style: { fg: barColor } }, barText)];
 
-  let mark = "·";
-  let markColor = colors.textMuted;
-  const labelChildren: React.ReactElement[] = [];
-  if (entry.status === "done" || entry.status === "failed") {
+  // Kimi renderCellLabel：终态标记是标签的一部分（"✓ text"），其余态直接标签。
+  let label = "";
+  let labelColor = colors.textMuted;
+  if (entry.status === "done") {
     const body = collapseCellText(entry.text ?? "");
-    const label = body.length > 0 ? body : entry.item;
-    mark = entry.status === "done" ? "✓ " : "✗ ";
-    markColor = entry.status === "done" ? colors.success : colors.error;
-    labelChildren.push(h("text", { style: { fg: markColor } }, truncateDisplay(label, textWidth)));
+    label = `✓ ${body.length > 0 ? body : entry.item}`;
+    labelColor = colors.success;
+  } else if (entry.status === "failed") {
+    const body = collapseCellText(entry.text ?? "");
+    label = `✗ ${body.length > 0 ? body : entry.item}`;
+    labelColor = colors.error;
   } else if (entry.status === "running") {
-    mark = "⠋ ";
-    markColor = colors.accent;
     // Kimi runningCellLabelText：实时行 > item > Working…。
-    const text = liveLine.length > 0 ? liveLine : entry.item.length > 0 ? entry.item : "Working…";
-    labelChildren.push(h("text", { style: { fg: colors.textMuted } }, truncateDisplay(text, textWidth)));
+    label = liveLine.length > 0 ? liveLine : entry.item.length > 0 ? entry.item : "Working…";
   } else if (entry.status === "suspended") {
-    mark = "⠏ ";
-    markColor = colors.warning;
-    labelChildren.push(h("text", { style: { fg: colors.warning } }, "Rate limited…"));
+    label = "Rate limited…";
+    labelColor = colors.warning;
   } else {
-    labelChildren.push(
-      h(
-        "text",
-        { style: { fg: colors.textMuted } },
-        truncateDisplay(entry.item.length > 0 ? entry.item : "Queued…", textWidth),
-      ),
-    );
+    label = entry.item.length > 0 ? entry.item : "Queued…";
   }
 
   return h(
@@ -194,25 +197,26 @@ function renderSwarmCell(input: {
     ...barRuns,
     h("text", { style: { fg: colors.textMuted } }, "] "),
     compact
-      ? h("text", { style: { fg: markColor } }, mark.trimEnd())
-      : h(
-          "box",
-          { style: { flexDirection: "row" } },
-          h("text", { style: { fg: markColor } }, mark),
-          ...labelChildren,
-        ),
+      ? h(
+          "text",
+          { style: { fg: labelColor } },
+          settled ? label.slice(0, 1) : "",
+        )
+      : h("text", { style: { fg: labelColor } }, truncateDisplay(label, labelWidth)),
   );
 }
 
-/** 纯渲染：输入板面快照 + 终端宽度，输出完整元素树（测试可直接遍历）。 */
+/** 纯渲染：输入板面快照 + 终端宽度 + 动画帧，输出完整元素树（测试可直接遍历）。 */
 export function renderSwarmBoard({
   board,
   terminalWidth = 100,
   toolCallId,
+  frame = 0,
 }: {
   board: SwarmProgressBoard;
   terminalWidth?: number;
   toolCallId?: string;
+  frame?: number;
 }): React.ReactElement {
   const colors = themeColors();
   const width = Math.max(40, terminalWidth - 4);
@@ -220,11 +224,14 @@ export function renderSwarmBoard({
   const { columns, cellWidth, barCells } = gridLayout(width, board.entries.length, idWidth);
   // 极窄终端的紧凑降级：cell 只剩 序号+[bar]+标记（Kimi 的 compact cell）。
   const compact = width < 52;
-  // 标签预算 = cell 宽 − (id+空格+[+bar+]+空格)，含状态标记占位。
+  // 标签预算 = cell 宽 − (id+空格+[+bar+]+空格)；Kimi 终态标记是标签前缀，同列结算。
   const labelWidth = Math.max(3, cellWidth - idWidth - 1 - barCells - 2 - 1);
+  const hasActiveMembers =
+    board.entries.some((entry) => entry.status === "running" || entry.status === "suspended") ||
+    board.done + board.failed < board.total;
 
   const headerSegments: React.ReactElement[] = [
-    h("text", { style: { fg: colors.primary } }, "─ "),
+    h("text", { style: { fg: colors.primary } }, `${LEFT_INDENT}─ `),
     ...gradientRun("Agent Swarm", colors.primary, colors.accent),
   ];
   if (board.description.length > 0) {
@@ -244,7 +251,9 @@ export function renderSwarmBoard({
   const rows: React.ReactElement[] = [];
   const visible = board.entries;
   for (let start = 0; start < visible.length; start += columns) {
-    const cells: React.ReactElement[] = [];
+    const cells: React.ReactElement[] = [
+      h("text", { key: "indent", style: {} }, LEFT_INDENT),
+    ];
     for (let col = 0; col < columns && start + col < visible.length; col += 1) {
       const entry = visible[start + col]!;
       cells.push(
@@ -255,6 +264,7 @@ export function renderSwarmBoard({
           labelWidth,
           colors,
           liveLine: entry.status === "running" ? readSwarmLiveLine(toolCallId, entry.index) : "",
+          frame,
           compact,
         }),
       );
@@ -274,7 +284,7 @@ export function renderSwarmBoard({
       : allSuspended
         ? `⏸ Rate limited… (${settled}/${board.total})`
         : board.total > 0
-          ? `⠋ Working… (${settled}/${board.total})`
+          ? `Working… (${settled}/${board.total})`
           : `Queued… (${board.total})`;
   const statusColor =
     board.total > 0 && settled === board.total
@@ -282,13 +292,16 @@ export function renderSwarmBoard({
         ? colors.error
         : colors.success
       : colors.accent;
-  // Kimi 同款：pip 条铺满状态行剩余宽度（label + 2 空格 + bar = width）。
-  const pipWidth = Math.max(0, width - 2 - statusText.length - 2);
+  // Kimi renderActivityPrefix：活动期状态行前缀是 80ms 轮转的 braille spinner。
+  const spinner = BRAILLE_SPINNER_FRAMES[frame % BRAILLE_SPINNER_FRAMES.length]!;
+  const prefix = hasActiveMembers ? `${spinner} ` : "";
+  // Kimi 同款：pip 条铺满状态行剩余宽度（缩进+前缀+label+2 空格+bar = width）。
+  const pipWidth = Math.max(0, width - 1 - prefix.length - statusText.length - 2);
   const pipFilled = board.total === 0 ? 0 : Math.round((settled / board.total) * pipWidth);
   const footer = h(
     "box",
-    { key: "foot", style: { flexDirection: "row" } },
-    h("text", { style: { fg: statusColor } }, `  ${statusText}  `),
+    { key: "foot", style: { flexDirection: "row", marginTop: 1 } },
+    h("text", { style: { fg: statusColor } }, `${LEFT_INDENT}${prefix}${statusText}  `),
     h("text", { style: { fg: colors.success } }, "━".repeat(pipFilled)),
     h("text", { style: { fg: colors.textMuted } }, "╌".repeat(Math.max(0, pipWidth - pipFilled))),
   );
@@ -309,7 +322,7 @@ export function renderSwarmBoard({
   );
 }
 
-/** 渲染组件：实时文本版本推进时整板重渲染（元素生成本身是纯函数）。 */
+/** 渲染组件：live 文本版本推进 + 本地动画帧（活动期 80ms）驱动整板重渲染。 */
 export function AgentSwarmBoardView({
   board,
   terminalWidth,
@@ -320,5 +333,9 @@ export function AgentSwarmBoardView({
   toolCallId?: string;
 }): React.ReactElement {
   useSwarmLiveVersion(toolCallId);
-  return renderSwarmBoard({ board, terminalWidth, toolCallId });
+  const active =
+    board.entries.some((entry) => entry.status === "running" || entry.status === "suspended") ||
+    board.done + board.failed < board.total;
+  const frame = useSwarmAnimationFrame(active);
+  return renderSwarmBoard({ board, terminalWidth, toolCallId, frame });
 }
