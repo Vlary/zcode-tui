@@ -150,6 +150,16 @@ export function parseSlashCommand(input: string): SlashCommand | null {
     };
   }
 
+  // /yolo 是 /mode yolo 的直达快捷方式：提交即切换，多余参数按 yolo 处理。
+  if (rawName === "yolo") {
+    return {
+      args: "yolo",
+      name: "mode",
+      rawName,
+      type: "known",
+    };
+  }
+
   if (rawName === "mcp") {
     return {
       args,

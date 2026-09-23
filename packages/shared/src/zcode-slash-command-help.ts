@@ -133,6 +133,15 @@ export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlas
     },
     {
       details: [
+        "Shortcut for /mode yolo: switches to the low-confirmation permission mode immediately.",
+        "Switch back with /mode build (or /mode plan) afterwards.",
+      ],
+      name: "yolo",
+      summary: "Switch to yolo mode (fewer confirmations).",
+      usage: "/yolo",
+    },
+    {
+      details: [
         "Shows the current and selectable models when called without arguments or with list.",
         "Use a provider/model id to select a model with its default reasoning effort; use /effort to change the effort.",
       ],
