@@ -1,6 +1,12 @@
-// AgentSwarmBoardView 元素树结构断言：渐变标题逐字着色、宽度自适应列数、pip 分段。
+// AgentSwarmBoardView 元素树结构断言：渐变标题逐字着色、Kimi 网格列数、
+// 全宽 pip、模型段标题、终态 text 标签、running cell 实时模型文本。
 import React from "react";
-import { AgentSwarmBoardView } from "./packages/tui/src/app-tool-swarm-board.js";
+import { renderSwarmBoard } from "./packages/tui/src/app-tool-swarm-board.js";
+import {
+  resetSwarmLiveState,
+  swarmLiveIngest,
+} from "./packages/tui/src/app-swarm-live.js";
+import { SessionEventType } from "./packages/contracts/src/events/session.events.js";
 
 type ElementLike = {
   type: unknown;
@@ -42,17 +48,18 @@ function collectTexts(node: unknown): Array<{ fg?: unknown; text: string }> {
 
 const board = {
   description: "review core files",
+  modelLabel: "GLM-5.3 · max",
   total: 6,
   done: 2,
   failed: 1,
   running: 1,
   entries: [
-    { index: 1, status: "done" as const, ticks: 28, item: "src/a.ts", tokens: 1200 },
+    { index: 1, status: "done" as const, ticks: 28, item: "src/a.ts", tokens: 1200, text: "## 内网 MC 服务器检查报告 全部服务在线" },
     { index: 2, status: "done" as const, ticks: 28, item: "src/b.ts", tokens: 900 },
     { index: 3, status: "running" as const, ticks: 9, item: "src/c.ts" },
     { index: 4, status: "suspended" as const, ticks: 3, item: "src/d.ts" },
     { index: 5, status: "queued" as const, ticks: 0, item: "src/e.ts" },
-    { index: 6, status: "failed" as const, ticks: 0, item: "src/f.ts" },
+    { index: 6, status: "failed" as const, ticks: 0, item: "src/f.ts", text: "connection refused" },
   ],
 };
 
@@ -62,29 +69,33 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   console.log(`${ok ? "PASS" : "FAIL"}: ${label}${detail ? ` — ${detail}` : ""}`);
 };
 
-// 1. 渐变标题：Agent Swarm 12 个字符各一个独立着色 text
+// 1. 渐变标题：Agent Swarm 12 个字符各一个独立着色 text；模型段出现在头部
 {
-  const view = AgentSwarmBoardView({ board, terminalWidth: 100 });
+  const view = renderSwarmBoard({ board, terminalWidth: 100 });
   const texts = collectTexts(view);
   const headerRun = texts.filter((t) => /^[A-Za-z]$/.test(t.text));
   assert("gradient per-char colors", headerRun.length >= 10, `chars=${headerRun.length}`);
   const distinctFg = new Set(headerRun.map((t) => String(t.fg)));
   assert("gradient has distinct colors", distinctFg.size >= 8, `distinct=${distinctFg.size}`);
   const fullText = texts.map((t) => t.text).join("");
-  assert("header text present", fullText.includes("Agent Swarm") && fullText.includes("review core files"));
+  assert(
+    "header text present",
+    fullText.includes("Agent Swarm") && fullText.includes("review core files"),
+  );
+  assert("header model segment", fullText.includes("GLM-5.3 · max"), fullText.slice(0, 90));
 }
 
-// 2. 自适应列数：窄屏 1 列、宽屏多列（按 row box 的 cell 计数）
+// 2. Kimi 网格：窄屏 1 列、宽屏多列（columns = floor((w+2)/32) 上限 count）
 {
   const countCells = (width: number): number[] => {
-    const view = AgentSwarmBoardView({ board, terminalWidth: width });
+    const view = renderSwarmBoard({ board, terminalWidth: width });
     const rows: number[] = [];
     walk(view, (element) => {
       if (element.type !== "box") return;
       const style = (element.props?.style ?? {}) as { flexDirection?: string };
       if (style.flexDirection !== "row") return;
       const cells = asElements((element.props as { children?: unknown }).children).filter(
-        (child) => String(child.type) === "box",
+        (child) => String(child.type) === "box" || String(child.type).includes("SwarmCell"),
       );
       if (cells.length > 1) rows.push(cells.length);
     });
@@ -96,21 +107,74 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   assert("wide uses multi-column", wide.length > 0 && Math.max(...wide) >= 2, JSON.stringify(wide));
 }
 
-// 3. pip 状态条：完成比例填充（settled=3/6 → 9 filled）
+// 3. 全宽 pip：pip 总长铺满剩余宽度（width−2−状态文本−2），3/6 → 填充与留空各半
 {
-  const view = AgentSwarmBoardView({ board, terminalWidth: 100 });
+  const view = renderSwarmBoard({ board, terminalWidth: 100 });
   const texts = collectTexts(view);
   const pipFilled = texts.find((t) => /^━+$/.test(t.text));
   const pipEmpty = texts.find((t) => /^╌+$/.test(t.text));
-  assert("pip filled 9", pipFilled?.text.length === 9, pipFilled?.text.length.toString());
-  assert("pip empty 9", pipEmpty?.text.length === 9, pipEmpty?.text.length.toString());
+  const statusText = "⠋ Working… (3/6)";
+  const expected = 96 - 2 - statusText.length - 2;
+  assert(
+    "pip fills remaining width",
+    pipFilled !== undefined &&
+      pipEmpty !== undefined &&
+      pipFilled.text.length + pipEmpty.text.length === expected,
+    `filled=${pipFilled?.text.length} empty=${pipEmpty?.text.length} expected=${expected}`,
+  );
+  assert("pip ratio half", pipFilled?.text.length === Math.round((3 / 6) * expected));
 }
 
-// 4. 状态语义：✓ 绿、✗ 红、⠋、Queued… 存在
+// 4. 状态语义：done 显示最终输出首段、failed 显示原因、queued 显示 item、限速标签
+//    （单列宽度下标签有完整预算：65 列终端 → 板宽 61 → 1 列 → cell 61）
 {
-  const view = AgentSwarmBoardView({ board, terminalWidth: 100 });
+  const view = renderSwarmBoard({ board, terminalWidth: 65 });
   const joined = collectTexts(view).map((t) => t.text).join("");
-  assert("cell states rendered", joined.includes("✓ src/a.ts") && joined.includes("✗ src/f.ts") && joined.includes("⠋ src/c.ts") && joined.includes("Rate limited…") && joined.includes("Queued…"));
+  assert(
+    "done cell shows final text",
+    joined.includes("✓ ## 内网 MC 服务器检查报告 全部服务在线"),
+    joined.slice(0, 160),
+  );
+  assert("done without text falls back to item", joined.includes("✓ src/b.ts"));
+  assert("failed cell shows error text", joined.includes("✗ connection refused"));
+  assert("queued cell shows item", joined.includes("src/e.ts"));
+  assert("suspended label", joined.includes("Rate limited…"));
+}
+
+// 5. running cell 实时模型文本：SubagentSpawned 路由 + ModelStreaming delta 滚动
+{
+  resetSwarmLiveState();
+  swarmLiveIngest({
+    type: SessionEventType.SubagentSpawned,
+    sessionId: "parent",
+    payload: {
+      parentToolCallId: "call_sw_9#swarm-3",
+      childSessionId: "child-3",
+      agentId: "agent-3",
+    },
+  } as never);
+  swarmLiveIngest({
+    type: SessionEventType.ModelStreaming,
+    sessionId: "child-3",
+    payload: { kind: "reasoning_delta", delta: "The task is straightforward.\n1. On 192.168.3.21: " },
+  } as never);
+  swarmLiveIngest({
+    type: SessionEventType.ModelStreaming,
+    sessionId: "child-3",
+    payload: { kind: "reasoning_delta", delta: "easytier-cli peer status" },
+  } as never);
+  const view = renderSwarmBoard({ board, terminalWidth: 65, toolCallId: "call_sw_9" });
+  const joined = collectTexts(view).map((t) => t.text).join("");
+  assert(
+    "running cell shows latest model line",
+    joined.includes("1. On 192.168.3.21: easytier-cli peer status"),
+    joined.slice(0, 220),
+  );
+  // 未挂 toolCallId（历史回放）时回退到 item
+  const historyView = renderSwarmBoard({ board, terminalWidth: 65 });
+  const historyJoined = collectTexts(historyView).map((t) => t.text).join("");
+  assert("history view falls back to item", historyJoined.includes("src/c.ts"));
+  resetSwarmLiveState();
 }
 
 console.log(fail === 0 ? "=== VIEW PASS ===" : `=== VIEW FAIL ${fail} ===`);

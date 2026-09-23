@@ -59,12 +59,13 @@ applyToolTranscriptEvent(
       rows: ["✓ #1 x · 3.2s · 1.1k tok", "⠏ #2 y"],
       board: {
         description: "review",
+        modelLabel: "GLM-5.3 · max",
         total: 2,
         done: 1,
         failed: 0,
         running: 1,
         entries: [
-          { index: 1, status: "done", ticks: 28, item: "x", tokens: 1100 },
+          { index: 1, status: "done", ticks: 28, item: "x", tokens: 1100, text: "## 报告首行 结论A" },
           { index: 2, status: "running", ticks: 5, item: "y" },
         ],
       },
@@ -82,10 +83,23 @@ assert(
   JSON.stringify(dynamic.detailLines),
 );
 assert("status running", dynamic.status === "running");
-const boardPart = part as unknown as { swarmBoard?: { total: number; done: number; entries: unknown[] } };
+const boardPart = part as unknown as {
+  swarmBoard?: {
+    total: number;
+    done: number;
+    entries: unknown[];
+    modelLabel?: string;
+  };
+};
 assert(
   "structured board attached",
   boardPart.swarmBoard?.total === 2 && boardPart.swarmBoard.done === 1 && boardPart.swarmBoard.entries?.length === 2,
+  JSON.stringify(boardPart.swarmBoard),
+);
+assert(
+  "board model label and entry text pass through",
+  boardPart.swarmBoard?.modelLabel === "GLM-5.3 · max" &&
+    (boardPart.swarmBoard.entries[0] as { text?: string }).text === "## 报告首行 结论A",
   JSON.stringify(boardPart.swarmBoard),
 );
 

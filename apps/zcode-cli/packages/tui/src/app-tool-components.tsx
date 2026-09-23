@@ -29,7 +29,10 @@ export function ToolTranscriptPartView({
   const outputLines = part.output ? restoredOutputLines(part.output, terminalWidth) : [];
   // AgentSwarm 走专用富文本板面：渐变标题 + 自适应网格 + 分段状态条。
   if (part.swarmBoard) {
-    return h(AgentSwarmBoardView, { board: part.swarmBoard, terminalWidth });
+    return h(
+      AgentSwarmBoardView,
+      { board: part.swarmBoard, terminalWidth, toolCallId: part.toolCallId },
+    );
   }
   // tool rows should align with assistant text; child detail rows carry their own indent.
   return h(

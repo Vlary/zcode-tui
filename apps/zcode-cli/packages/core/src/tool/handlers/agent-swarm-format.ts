@@ -121,6 +121,16 @@ export interface SwarmProgressEntry {
   ticks: number;
   durationMs?: number;
   totalTokens?: number;
+  /** 终态文本（done=最终输出、failed=失败原因），进入 cell 标签。 */
+  text?: string;
+}
+
+/** cell 终态标签的文本预算：板面事件不携带整段报告。 */
+const MAX_CELL_TEXT_CHARS = 200;
+
+/** Kimi 同款单行折叠：全部空白压成单个空格，供终态标签复用。 */
+export function collapseCellText(text: string): string {
+  return text.replaceAll(/\s+/g, " ").trim().slice(0, MAX_CELL_TEXT_CHARS);
 }
 
 const BOARD_WIDTH = 88;
@@ -154,26 +164,20 @@ function brailleBar(ticks: number, settled: boolean): string {
 }
 
 function cellLabel(entry: SwarmProgressEntry): string {
-  if (entry.status === "failed") return `✗ ${entry.item}`;
-  if (entry.status === "done") {
-    const tokens = entry.totalTokens === undefined ? "" : ` · ${formatTokens(entry.totalTokens)}`;
-    return `✓ ${entry.item}${tokens}`;
-  }
+  if (entry.status === "failed") return `✗ ${collapseCellText(entry.text ?? entry.item)}`;
+  if (entry.status === "done") return `✓ ${collapseCellText(entry.text ?? entry.item)}`;
   if (entry.status === "running") return `⠋ ${entry.item}`;
   if (entry.status === "suspended") return "⠏ Rate limited…";
-  return "Queued…";
+  return `· ${entry.item}`;
 }
 
 function padCell(text: string): string {
   return text.length > CELL_WIDTH ? `${text.slice(0, CELL_WIDTH - 1)}…` : text.padEnd(CELL_WIDTH, " ");
 }
 
-function formatTokens(tokens: number): string {
-  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k tok` : `${tokens} tok`;
-}
-
 export function renderSwarmProgress(input: {
   description: string;
+  modelLabel?: string;
   entries: readonly SwarmProgressEntry[];
 }): { title: string; rows: string[]; board: SwarmProgressBoard } {
   const entries = input.entries;
@@ -185,12 +189,13 @@ export function renderSwarmProgress(input: {
   const total = entries.length;
   const idWidth = Math.max(3, String(Math.max(1, total)).length);
 
-  // 标题：─ Agent Swarm ─ description ───────
+  // 标题：─ Agent Swarm ─ description ─ model ───────
   const head = "Agent Swarm";
   const desc = input.description.length > 0 ? ` ─ ${input.description}` : "";
-  const used = head.length + desc.length + 2;
+  const model = input.modelLabel ? ` ─ ${input.modelLabel}` : "";
+  const used = head.length + desc.length + model.length + 2;
   const tail = "─".repeat(Math.max(1, BOARD_WIDTH - used - 1));
-  const title = `${head}${desc} ${tail}`.slice(0, BOARD_WIDTH);
+  const title = `${head}${desc}${model} ${tail}`.slice(0, BOARD_WIDTH);
 
   // 网格行
   const rows: string[] = [];
@@ -227,6 +232,7 @@ export function renderSwarmProgress(input: {
     rows,
     board: {
       description: input.description,
+      ...(input.modelLabel ? { modelLabel: input.modelLabel } : {}),
       total,
       done,
       failed,
@@ -236,6 +242,7 @@ export function renderSwarmProgress(input: {
         status: entry.status,
         ticks: entry.ticks,
         item: entry.item,
+        ...(entry.text === undefined ? {} : { text: entry.text }),
         ...(entry.totalTokens === undefined ? {} : { tokens: entry.totalTokens }),
       })),
     },

@@ -12,8 +12,10 @@ export function swarmBoardFromPayload(payload: Record<string, unknown>): SwarmPr
   const board = asRecord(swarm.board);
   if (board === null) return undefined;
   const entriesRaw = Array.isArray(board.entries) ? board.entries : [];
+  const modelLabel = stringField(board, "modelLabel");
   return {
     description: stringField(board, "description") ?? "",
+    ...(modelLabel ? { modelLabel } : {}),
     total: numberField(board, "total") ?? 0,
     done: numberField(board, "done") ?? 0,
     failed: numberField(board, "failed") ?? 0,
@@ -22,6 +24,7 @@ export function swarmBoardFromPayload(payload: Record<string, unknown>): SwarmPr
       const record = asRecord(entry);
       const rawStatus = stringField(record, "status");
       const tokens = numberField(record, "tokens");
+      const text = stringField(record, "text");
       return {
         index: numberField(record, "index") ?? position + 1,
         status:
@@ -33,6 +36,7 @@ export function swarmBoardFromPayload(payload: Record<string, unknown>): SwarmPr
             : ("queued" as const),
         ticks: numberField(record, "ticks") ?? 0,
         item: stringField(record, "item") ?? "",
+        ...(text ? { text } : {}),
         ...(tokens === undefined ? {} : { tokens }),
       };
     }),

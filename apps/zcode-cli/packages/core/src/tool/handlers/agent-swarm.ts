@@ -30,6 +30,7 @@ import {
 import type { ToolEntry, ToolHandler } from "../types.js";
 import { runSwarmPool, type SwarmEngineOptions, type SwarmEnginePorts } from "./agent-swarm-pool.js";
 import {
+  collapseCellText,
   renderSwarmProgress,
   type SwarmProgressEntry,
   AGENT_SWARM_DESCRIPTION,
@@ -37,9 +38,19 @@ import {
   formatAgentSwarmOutputForModel,
   MAX_SWARM_MODEL_BYTES,
 } from "./agent-swarm-format.js";
+import type { Model } from "@zcode/contracts";
 
 const DEFAULT_SWARM_CONCURRENCY = 8;
 const MAX_SWARM_CONCURRENCY = 32;
+
+/** 标题模型段："显示名 · 档位"（Kimi "K2.8 Preview · max" 同构）。 */
+function swarmModelLabel(model: Model | undefined): string | undefined {
+  if (!model) return undefined;
+  const name = model.displayName ?? model.modelId;
+  const effort = model.options.reasoningLevel;
+  const label = effort ? `${name} · ${effort}` : name;
+  return label.length > 0 ? label : undefined;
+}
 
 
 
@@ -154,9 +165,12 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
     );
   }
 
+  // Kimi 同款标题模型段：display 名 + 思考档位（如 "GLM-5.3 · max"）。
+  const modelLabel = swarmModelLabel(context.model);
+
   const emitSwarmProgress = (entries: readonly SwarmProgressEntry[]): void => {
     if (!context.emitEvent) return;
-    const view = renderSwarmProgress({ description: parsed.description, entries });
+    const view = renderSwarmProgress({ description: parsed.description, modelLabel, entries });
     void context
       .emitEvent({
         id: randomUUID() as never,
@@ -249,19 +263,29 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
   emitSwarmProgress(
     specs.map((spec, index) => {
       const entry = subagents[index]!;
+      const label = spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`;
+      // 终态板面带子代理结论首段：完成 cell 显示最终输出、失败 cell 显示原因。
+      const text =
+        entry.outcome === "completed"
+          ? collapseCellText(entry.text ?? "")
+          : entry.error === undefined
+            ? undefined
+            : collapseCellText(entry.error);
       return entry.outcome === "completed"
         ? {
-            item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
+            item: label,
             status: "done" as const,
             ticks: 0,
             durationMs: entry.totalDurationMs,
             totalTokens: entry.totalTokens,
+            ...(text ? { text } : {}),
           }
         : {
-            item: spec.resumeAgentId === undefined ? spec.item : `${spec.item} (resume)`,
+            item: label,
             status: "failed" as const,
             ticks: 0,
             durationMs: entry.totalDurationMs,
+            ...(text ? { text } : {}),
           };
     }),
   );

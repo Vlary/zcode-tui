@@ -864,6 +864,8 @@ export interface ToolCallProgressPayload {
 /** AgentSwarm 板面的结构化投影，供富文本视图布局。 */
 export interface SwarmProgressBoard {
   description: string;
+  /** 标题模型段（如 "GLM-5.3 · max"），由 handler 从当前模型选型折算。 */
+  modelLabel?: string;
   total: number;
   done: number;
   failed: number;
@@ -874,6 +876,8 @@ export interface SwarmProgressBoard {
     ticks: number;
     item: string;
     tokens?: number;
+    /** 终态文本：done=最终输出首段、failed=失败原因；已按单行标签预算截断。 */
+    text?: string;
   }>;
 }
 
