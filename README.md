@@ -7,10 +7,14 @@
 相对上游新增 / 修改的内容：
 
 - **AgentSwarm 工具**（批量并行子代理）：一次调用按 `prompt_template + items` 批量 fan-out 最多 128 个子代理，带断点续跑、每子代理超时、限速退避重试与启动节流
-- **TUI swarm 显示**：工具调用行渲染为 `swarm (N subagents)` 分组卡片，附 items 预览与续跑计数；子代理沿用侧边栏 Subagents 区（点击可看 transcript）
+- **TUI swarm 进度板**：专用富文本板面——渐变标题（描述 + 模型/档位段）、宽度自适应网格、braille 8 级进度条动画；运行中的格子实时滚动该子代理的最新模型输出，完成后定格为最终报告首行，底部进度条铺满整行
 - **ACP 编辑器集成（`zcode acp`）**：以 Agent Client Protocol agent 身份服务 stdio，Zed 等 ACP 客户端直接驱动——思考流/正文流/工具调用/用量全量回传，阻塞式 prompt 完成语义
 - **SSH 远程工作区（`zcode connect`）**：从桌面版迁移的远程工作区能力——agent 与文件改动都发生在远端机器，本地终端只承载交互；`--deploy` 可把当前 CLI 单文件产物自动部署到远端
 - **Windows 中文乱码修复**：GBK 代码页的控制台在启动时自动切到 UTF-8（仅 win32 + TTY 生效，不影响其他平台）
+
+### swarm 进度板
+
+![swarm board](screenshots/swarm-board.png)
 
 ## 快速开始
 
