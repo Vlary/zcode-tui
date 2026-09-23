@@ -1,7 +1,7 @@
 import React from "react";
 import type { SwarmProgressBoard } from "@zcode/contracts";
 import { activeTuiTheme } from "./theme/index.js";
-import { truncateDisplay } from "./app-terminal-width.js";
+import { padDisplay, truncateDisplay } from "./app-terminal-width.js";
 import {
   readSwarmLiveLine,
   useSwarmAnimationFrame,
@@ -202,7 +202,12 @@ function renderSwarmCell(input: {
           { style: { fg: labelColor } },
           settled ? label.slice(0, 1) : "",
         )
-      : h("text", { style: { fg: labelColor } }, truncateDisplay(label, labelWidth)),
+      : // 恒宽填充：实时文本长度变化只在固定框内刷新，不牵动相邻 cell（防闪烁）。
+        h(
+          "text",
+          { style: { fg: labelColor } },
+          padDisplay(truncateDisplay(label, labelWidth), labelWidth),
+        ),
   );
 }
 

@@ -182,6 +182,34 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   const historyView = renderSwarmBoard({ board, terminalWidth: 65 });
   const historyJoined = collectTexts(historyView).map((t) => t.text).join("");
   assert("history view falls back to item", historyJoined.includes("src/c.ts"));
+  // 防闪烁：实时行长度变化时 cell 标签保持恒定显示宽度（右侧格子不移动）。
+  const widthOf = (text: string): number =>
+    [...text].reduce(
+      (sum, char) =>
+        sum +
+        (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/.test(char) ? 2 : 1),
+      0,
+    );
+  const runningLabelOf = (view: React.ReactElement): string | undefined =>
+    collectTexts(view).find((t) => t.text.startsWith("1. On 19"))?.text;
+  const switchedLabelOf = (view: React.ReactElement): string | undefined =>
+    collectTexts(view).find((t) => /^X +$/.test(t.text))?.text;
+  const shortRun = renderSwarmBoard({ board, terminalWidth: 65, toolCallId: "call_sw_9" });
+  swarmLiveIngest({
+    type: SessionEventType.ModelStreaming,
+    sessionId: "child-3",
+    payload: { kind: "reasoning_delta", delta: "\nX" },
+  } as never);
+  const switchedRun = renderSwarmBoard({ board, terminalWidth: 65, toolCallId: "call_sw_9" });
+  const labelBefore = runningLabelOf(shortRun);
+  const labelAfter = switchedLabelOf(switchedRun);
+  assert(
+    "running label keeps constant display width while text streams",
+    labelBefore !== undefined &&
+      labelAfter !== undefined &&
+      widthOf(labelBefore) === widthOf(labelAfter),
+    `before(${widthOf(labelBefore ?? "")})=${JSON.stringify(labelBefore?.slice(0, 24))} after(${widthOf(labelAfter ?? "")})=${JSON.stringify(labelAfter?.slice(0, 24))}`,
+  );
   resetSwarmLiveState();
 }
 
