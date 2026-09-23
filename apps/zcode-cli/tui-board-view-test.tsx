@@ -1,4 +1,4 @@
-// AgentSwarmBoardView 元素树结构断言：渐变标题逐字着色、Kimi 网格列数、
+// AgentSwarmBoardView 元素树结构断言：渐变标题逐字着色、自适应网格列数、
 // 全宽 pip、模型段标题、终态 text 标签、running cell 实时模型文本。
 import React from "react";
 import { renderSwarmBoard } from "./packages/tui/src/app-tool-swarm-board.js";
@@ -85,7 +85,7 @@ const assert = (label: string, ok: boolean, detail?: string) => {
   assert("header model segment", fullText.includes("GLM-5.3 · max"), fullText.slice(0, 90));
 }
 
-// 2. Kimi 网格：窄屏 1 列、宽屏多列（columns = floor((w+2)/32) 上限 count）
+// 2. 自适应网格：窄屏 1 列、宽屏多列（columns = floor((w+2)/32) 上限 count）
 {
   const countCells = (width: number): number[] => {
     const view = renderSwarmBoard({ board, terminalWidth: width });

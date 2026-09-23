@@ -161,7 +161,7 @@ export async function runSwarmPool(
       results[index] = await runOne(specs[index]!, index);
     }
   });
-  // Kimi 同款呼吸感：running cell 的 braille 条随时间漂移（简化估算器：每帧 +2）。
+  // 呼吸感动效：running cell 的 braille 条随时间漂移（简化估算器：每帧 +2）。
   const animator = setInterval(() => {
     let animated = false;
     for (const entry of board) {

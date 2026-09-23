@@ -4,14 +4,14 @@ import { SessionEventType, type SessionEvent } from "@zcode/contracts";
 // ============================================================
 // AgentSwarm 运行中 cell 的实时模型文本跟踪
 // ============================================================
-// Kimi 同款体验：running cell 滚动显示子代理最新的模型输出行。
+// 运行中体验：running cell 滚动显示子代理最新的模型输出行。
 // 数据源复用既有事件流——子代理的 ModelStreaming 事件（含 reasoning/text
 // delta）与 SubagentSpawned 事件都会投递到 TUI 的 observeSessionEvent，
 // 这里按 `parentToolCallId` 里的 `#swarm-N` 后缀把子会话路由回板面条目，
 // 不需要改动 SubagentPort 或 runtime。
 //
-// 存储：每个 (toolCallId, index) 一条滚动缓冲（Kimi MAX_LATEST_MODEL_CHARS
-// 同为 2000，超出从左侧丢弃），视图取「最后一个非空行」渲染。
+// 存储：每个 (toolCallId, index) 一条滚动缓冲（滚动缓冲上限
+// 2000 字符，超出从左侧丢弃），视图取「最后一个非空行」渲染。
 
 const MAX_LATEST_MODEL_CHARS = 2_000;
 const MAX_TRACKED_CHILDREN = 256;
@@ -102,7 +102,7 @@ export function swarmLiveIngest(event: SessionEvent): void {
   }
 }
 
-/** Kimi latestNonEmptyLine：折叠空白后取最后一个非空行。 */
+/** 折叠空白后取最后一个非空行。 */
 export function latestNonEmptyLine(text: string): string {
   const lines = text.split(/\r?\n/);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -143,7 +143,7 @@ export function useSwarmLiveVersion(toolCallId: string | undefined): number {
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** 活动期本地动画帧：80ms 递增（Kimi BRAILLE_SPINNER_INTERVAL_MS），终态停表。
+/** 活动期本地动画帧：80ms 递增（80ms 一帧），终态停表。
  *  驱动状态行 spinner 轮转与 running cell 的 braille 条漂移。 */
 const SWARM_ANIMATION_INTERVAL_MS = 80;
 

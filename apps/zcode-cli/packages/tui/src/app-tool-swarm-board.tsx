@@ -9,12 +9,12 @@ import {
 } from "./app-swarm-live.js";
 
 // ============================================================
-// AgentSwarm 专用富文本板面（Kimi Code 同款视觉）
+// AgentSwarm 专用富文本板面（富文本视觉）
 // ============================================================
 // AgentSwarmBoardView 是薄 hook 壳：订阅 swarm 实时文本版本驱动重渲染，
 // 元素树由纯函数 renderSwarmBoard 生成（可直接断言/回放）：
 // - 渐变标题头：Agent Swarm 逐字符 primary→accent 插值 + 描述 + 模型段 + 尾线
-// - Kimi 网格算法：列宽 30 期望值 → 列数铺满可用宽度，braille 条按剩余宽度取 6..8 格
+// - 网格算法：列宽 30 期望值 → 列数铺满可用宽度，braille 条按剩余宽度取 6..8 格
 // - running cell 滚动显示子代理最新模型输出行（app-swarm-live 跟踪器）
 // - done/failed cell 显示最终输出/失败原因首段（board.entries[].text）
 // - 底部 pip 状态条铺满整行剩余宽度
@@ -25,7 +25,7 @@ const h = React.createElement as (
   ...children: React.ReactNode[]
 ) => React.ReactElement;
 
-// Kimi agent-swarm-progress.ts 同参：TEXT_CELL_PREFERRED_WIDTH=30、
+// 布局常量：TEXT_CELL_PREFERRED_WIDTH=30、
 // TEXT_BRAILLE_BAR_MIN_WIDTH=6、BRAILLE_BAR_MAX_WIDTH=8。
 const CELL_PREFERRED_WIDTH = 30;
 const CELL_GAP = 2;
@@ -34,10 +34,10 @@ const BAR_MAX_CELLS = 8;
 const MIN_LABEL_WIDTH = 16;
 const BRAILLE_LEVELS = ["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"] as const;
 const BRAILLE_EMPTY = "⣀";
-// Kimi constant/rendering.ts 同款：状态行活动 spinner，80ms 一帧。
+// 状态行活动 spinner：80ms 一帧。
 const BRAILLE_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 80;
-// Kimi AGENT_SWARM_LEFT_INDENT：标题/网格/状态行统一 1 空格左缩进。
+// 标题/网格/状态行统一 1 空格左缩进。
 const LEFT_INDENT = " ";
 
 interface ThemeColors {
@@ -111,7 +111,7 @@ function brailleBarText(ticks: number, settled: boolean, cells: number): string 
   return out;
 }
 
-/** Kimi 同款网格：列数按 30 期望宽计算，cell 宽度均分铺满，bar 取剩余宽 6..8 格。 */
+/** 自适应网格：列数按 30 期望宽计算，cell 宽度均分铺满，bar 取剩余宽 6..8 格。 */
 function gridLayout(width: number, count: number, idWidth: number) {
   const columns = Math.max(
     1,
@@ -132,7 +132,7 @@ function collapseCellText(text: string): string {
   return text.replaceAll(/\s+/g, " ").trim();
 }
 
-/** 单个网格 cell：纯函数。Kimi 文本模式无独立 mark 列——终态标记并入标签，
+/** 单个网格 cell：纯函数。文本模式无独立 mark 列——终态标记并入标签，
  *  running 只有 bar 漂移 + live 文本。frame 为本地动画帧，驱动 running bar 漂移。 */
 function renderSwarmCell(input: {
   entry: SwarmProgressBoard["entries"][number];
@@ -154,9 +154,9 @@ function renderSwarmCell(input: {
         : settled || entry.status === "running"
           ? colors.success
           : colors.textMuted;
-  // Kimi failedBrailleBar：失败格红色只点亮前段，空段用暗化占位。
+  // 失败 bar：红色只点亮前段，空段用暗化占位。
   const failedDark = lerpColor(colors.error, colors.textMuted, 0.55);
-  // running bar 本地漂移：core 帧 ticks 为底数，本地每 80ms +1（Kimi estimator 同观感）。
+  // running bar 本地漂移：core 帧 ticks 为底数，本地每 80ms +1（持续漂移观感）。
   const effectiveTicks = entry.status === "running" ? entry.ticks + frame : entry.ticks;
   const barText = brailleBarText(effectiveTicks, settled, barCells);
   const redCells = Math.max(1, Math.ceil(barCells / 2));
@@ -168,7 +168,7 @@ function renderSwarmCell(input: {
         ]
       : [h("text", { style: { fg: barColor } }, barText)];
 
-  // Kimi renderCellLabel：终态标记是标签的一部分（"✓ text"），其余态直接标签。
+  // 终态标记是标签的一部分（"✓ text"），其余态直接标签。
   let label = "";
   let labelColor = colors.textMuted;
   if (entry.status === "done") {
@@ -180,7 +180,7 @@ function renderSwarmCell(input: {
     label = `✗ ${body.length > 0 ? body : entry.item}`;
     labelColor = colors.error;
   } else if (entry.status === "running") {
-    // Kimi runningCellLabelText：实时行 > item > Working…。
+    // 运行标签优先级：实时行 > item > Working…。
     label = liveLine.length > 0 ? liveLine : entry.item.length > 0 ? entry.item : "Working…";
   } else if (entry.status === "suspended") {
     label = "Rate limited…";
@@ -222,9 +222,9 @@ export function renderSwarmBoard({
   const width = Math.max(40, terminalWidth - 4);
   const idWidth = Math.max(3, String(Math.max(1, board.total)).length);
   const { columns, cellWidth, barCells } = gridLayout(width, board.entries.length, idWidth);
-  // 极窄终端的紧凑降级：cell 只剩 序号+[bar]+标记（Kimi 的 compact cell）。
+  // 极窄终端的紧凑降级：cell 只剩 序号+[bar]+标记（compact cell）。
   const compact = width < 52;
-  // 标签预算 = cell 宽 − (id+空格+[+bar+]+空格)；Kimi 终态标记是标签前缀，同列结算。
+  // 标签预算 = cell 宽 − (id+空格+[+bar+]+空格)；终态标记是标签前缀，同列结算。
   const labelWidth = Math.max(3, cellWidth - idWidth - 1 - barCells - 2 - 1);
   const hasActiveMembers =
     board.entries.some((entry) => entry.status === "running" || entry.status === "suspended") ||
@@ -274,7 +274,7 @@ export function renderSwarmBoard({
 
   const settled = board.done + board.failed;
   const queued = board.entries.filter((entry) => entry.status === "queued").length;
-  // Kimi totalStatus 语义：任一成员非终态即 Working；仅全部挂起（无限速外无进展）才是限速等待。
+  // 总状态语义：任一成员非终态即 Working；仅全部挂起（无限速外无进展）才是限速等待。
   const allSuspended = board.running === 0 && queued === 0 && settled < board.total;
   const statusText =
     board.total > 0 && settled === board.total
@@ -292,10 +292,10 @@ export function renderSwarmBoard({
         ? colors.error
         : colors.success
       : colors.accent;
-  // Kimi renderActivityPrefix：活动期状态行前缀是 80ms 轮转的 braille spinner。
+  // 活动期状态行前缀是 80ms 轮转的 braille spinner。
   const spinner = BRAILLE_SPINNER_FRAMES[frame % BRAILLE_SPINNER_FRAMES.length]!;
   const prefix = hasActiveMembers ? `${spinner} ` : "";
-  // Kimi 同款：pip 条铺满状态行剩余宽度（缩进+前缀+label+2 空格+bar = width）。
+  // pip 条铺满状态行剩余宽度（缩进+前缀+label+2 空格+bar = width）。
   const pipWidth = Math.max(0, width - 1 - prefix.length - statusText.length - 2);
   const pipFilled = board.total === 0 ? 0 : Math.round((settled / board.total) * pipWidth);
   const footer = h(

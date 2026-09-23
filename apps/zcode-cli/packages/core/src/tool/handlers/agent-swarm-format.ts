@@ -106,7 +106,7 @@ export function formatAgentSwarmOutputForModel(output: unknown): string {
 }
 
 // ============================================================
-// AgentSwarm 实时进度板（Kimi Code 同款视觉规格）
+// AgentSwarm 实时进度板（富文本视觉规格）
 // ============================================================
 // ─ Agent Swarm ─ description ─────── 线框标题
 //  001 [⣿⣷⣄⣀] ✓ item…           多列网格 cell：
@@ -128,7 +128,7 @@ export interface SwarmProgressEntry {
 /** cell 终态标签的文本预算：板面事件不携带整段报告。 */
 const MAX_CELL_TEXT_CHARS = 200;
 
-/** Kimi 同款单行折叠：全部空白压成单个空格，供终态标签复用。 */
+/** 单行折叠：全部空白压成单个空格，供终态标签复用。 */
 export function collapseCellText(text: string): string {
   return text.replaceAll(/\s+/g, " ").trim().slice(0, MAX_CELL_TEXT_CHARS);
 }
@@ -212,7 +212,7 @@ export function renderSwarmProgress(input: {
     rows.push(cells.join(CELL_GAP));
   }
 
-  // 底部 pip 状态条（Kimi totalStatus 语义：任一非终态即 Working；仅全部挂起才是限速）。
+  // 底部 pip 状态条（任一非终态即 Working；仅全部挂起才是限速）。
   const queued = entries.filter((e) => e.status === "queued").length;
   let statusLabel: string;
   if (total > 0 && settled === total) {

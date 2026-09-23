@@ -43,7 +43,7 @@ import type { Model } from "@zcode/contracts";
 const DEFAULT_SWARM_CONCURRENCY = 8;
 const MAX_SWARM_CONCURRENCY = 32;
 
-/** 标题模型段："显示名 · 档位"（Kimi "K2.8 Preview · max" 同构）。 */
+/** 标题模型段："显示名 · 档位"（如 "GLM-5.3 · max"）。 */
 function swarmModelLabel(model: Model | undefined): string | undefined {
   if (!model) return undefined;
   const name = model.displayName ?? model.modelId;
@@ -165,7 +165,7 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
     );
   }
 
-  // Kimi 同款标题模型段：display 名 + 思考档位（如 "GLM-5.3 · max"）。
+  // 标题模型段：display 名 + 思考档位（如 "GLM-5.3 · max"）。
   const modelLabel = swarmModelLabel(context.model);
 
   const emitSwarmProgress = (entries: readonly SwarmProgressEntry[]): void => {

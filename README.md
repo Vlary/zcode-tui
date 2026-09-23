@@ -6,7 +6,7 @@
 
 相对上游新增 / 修改的内容：
 
-- **AgentSwarm 工具**（对标 Kimi Code 的 swarm）：一次调用按 `prompt_template + items` 批量 fan-out 最多 128 个子代理，带断点续跑、每子代理超时、限速退避重试与启动节流
+- **AgentSwarm 工具**（批量并行子代理）：一次调用按 `prompt_template + items` 批量 fan-out 最多 128 个子代理，带断点续跑、每子代理超时、限速退避重试与启动节流
 - **TUI swarm 显示**：工具调用行渲染为 `swarm (N subagents)` 分组卡片，附 items 预览与续跑计数；子代理沿用侧边栏 Subagents 区（点击可看 transcript）
 - **ACP 编辑器集成（`zcode acp`）**：以 Agent Client Protocol agent 身份服务 stdio，Zed 等 ACP 客户端直接驱动——思考流/正文流/工具调用/用量全量回传，阻塞式 prompt 完成语义
 - **SSH 远程工作区（`zcode connect`）**：从桌面版迁移的远程工作区能力——agent 与文件改动都发生在远端机器，本地终端只承载交互；`--deploy` 可把当前 CLI 单文件产物自动部署到远端

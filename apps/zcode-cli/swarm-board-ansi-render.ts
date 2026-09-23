@@ -1,4 +1,4 @@
-// 把 renderSwarmBoard 元素树渲染成带 ANSI 颜色的文本，人工核对与 Kimi 截图的差异。
+// 把 renderSwarmBoard 元素树渲染成带 ANSI 颜色的文本，人工核对板面形态。
 import React from "react";
 import { renderSwarmBoard } from "./packages/tui/src/app-tool-swarm-board.js";
 import {
@@ -82,7 +82,7 @@ const base = (entries: Array<Record<string, unknown>>, extra: Record<string, unk
 
 const WIDTH = 108;
 show(
-  "A. 启动初期（3 格 queued，Kimi 应显示 Working）",
+  "A. 启动初期（3 格 queued，应显示 Working）",
   renderSwarmBoard({
     board: base([
       { index: 1, status: "queued", ticks: 0, item: "192.168.3.21" },
@@ -116,7 +116,7 @@ swarmLiveIngest({
 } as never);
 
 show(
-  "B. 运行中（done 1 + running 2 带实时文本，Kimi 截图 1/2 对应态）",
+  "B. 运行中（done 1 + running 2 带实时文本）",
   renderSwarmBoard({
     board: base([
       { index: 1, status: "done", ticks: 28, item: "192.168.3.21", text: "## 内网 MC 服务器检查报告（192.168.3.21） **检查时间**：实际 SSH 执行" },
@@ -130,7 +130,7 @@ show(
 );
 
 show(
-  "C. 全部完成（Kimi 截图 3 对应态）",
+  "C. 全部完成（终态）",
   renderSwarmBoard({
     board: base([
       { index: 1, status: "done", ticks: 28, item: "192.168.3.21", text: "## 内网 MC 服务器检查报告（192.168.3.21） **检查时间**：实际 SSH 执行…" },
