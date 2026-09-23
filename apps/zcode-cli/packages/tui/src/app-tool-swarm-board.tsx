@@ -263,15 +263,18 @@ export function renderSwarmBoard({
   }
 
   const settled = board.done + board.failed;
+  const queued = board.entries.filter((entry) => entry.status === "queued").length;
+  // Kimi totalStatus 语义：任一成员非终态即 Working；仅全部挂起（无限速外无进展）才是限速等待。
+  const allSuspended = board.running === 0 && queued === 0 && settled < board.total;
   const statusText =
     board.total > 0 && settled === board.total
       ? board.failed > 0
         ? `✗ Failed. (${board.done}/${board.total})`
         : `✓ Completed. (${board.total}/${board.total})`
-      : board.running > 0
-        ? `⠋ Working… (${settled}/${board.total})`
-        : board.total > 0 && board.done + board.failed + board.running === 0
-          ? `⏸ Rate limited… (${settled}/${board.total})`
+      : allSuspended
+        ? `⏸ Rate limited… (${settled}/${board.total})`
+        : board.total > 0
+          ? `⠋ Working… (${settled}/${board.total})`
           : `Queued… (${board.total})`;
   const statusColor =
     board.total > 0 && settled === board.total

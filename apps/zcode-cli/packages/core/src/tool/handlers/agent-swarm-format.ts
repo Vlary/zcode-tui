@@ -212,13 +212,14 @@ export function renderSwarmProgress(input: {
     rows.push(cells.join(CELL_GAP));
   }
 
-  // 底部 pip 状态条
+  // 底部 pip 状态条（Kimi totalStatus 语义：任一非终态即 Working；仅全部挂起才是限速）。
+  const queued = entries.filter((e) => e.status === "queued").length;
   let statusLabel: string;
   if (total > 0 && settled === total) {
     statusLabel = failed > 0 ? `✗ Failed. (${done}/${total})` : `✓ Completed. (${total}/${total})`;
-  } else if (suspended > 0 && running === 0) {
+  } else if (suspended > 0 && running === 0 && queued === 0) {
     statusLabel = `⏸ Rate limited… (${settled}/${total})`;
-  } else if (running > 0 || suspended > 0) {
+  } else if (total > 0) {
     statusLabel = `⠋ Working… (${settled}/${total})`;
   } else {
     statusLabel = `Queued… (${total})`;
