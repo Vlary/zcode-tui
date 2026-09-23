@@ -171,13 +171,15 @@ const agentSwarmHandler: ToolHandler = async (input, context) => {
   const emitSwarmProgress = (entries: readonly SwarmProgressEntry[]): void => {
     if (!context.emitEvent) return;
     const view = renderSwarmProgress({ description: parsed.description, modelLabel, entries });
+    // timestamp 必须是 Date：runtime 的 recordToolUsageFromEvent 会调 .getTime()，
+    // 传数字会在 sink 通知前抛错，板面事件就此静默丢失。
     void context
       .emitEvent({
         id: randomUUID() as never,
         sessionId: context.sessionId,
         turnId: context.turnId,
         type: SessionEventType.ToolCallProgress,
-        timestamp: Date.now(),
+        timestamp: new Date(),
         traceId: context.traceId,
         sequenceNumber: 0,
         payload: {
