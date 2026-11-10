@@ -37,6 +37,7 @@ import {
   createTaskToolEntry,
   taskToolEntry,
 } from "./agent.js";
+import { agentSwarmToolEntry } from "./agent-swarm.js";
 import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
@@ -116,6 +117,7 @@ export const builtInTools: ToolEntry[] = [
   // 渠道回复等待插件入口接入；仅注释默认注册，保留完整实现。
   // replyToChannelToolEntry,
   agentToolEntry,
+  agentSwarmToolEntry,
   taskToolEntry,
   skillToolEntry,
   jsToolEntry,

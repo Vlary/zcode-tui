@@ -5,7 +5,7 @@
   "description": "A cross-platform TypeScript Node.js CLI with a small TUI and optional SEA packaging.",
   "type": "module",
   "scripts": {
-    "build": "turbo run build",
+    "build": "npx --no-install turbo run build",
     "build:sea": "pnpm --filter @zcode/cli build:sea",
     "check": "pnpm registry:check && turbo run typecheck && pnpm test",
     "clean": "turbo run clean",

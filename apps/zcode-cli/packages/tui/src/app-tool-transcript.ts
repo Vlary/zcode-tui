@@ -5,6 +5,12 @@ import { formatFileDiffDisplay } from "./app-tool-diff-display.js";
 import { formatToolFilePath } from "./app-tool-path-display.js";
 import { truncateDisplay } from "./app-terminal-width.js";
 import { asRecord, booleanField, stringField } from "./state.js";
+import {
+  agentSwarmProjection,
+  swarmBoardFromPayload,
+  swarmRowsFromPayload,
+  swarmTitleFromPayload,
+} from "./app-tool-swarm-payload.js";
 
 const MAX_DETAIL_LINES = 4;
 const MAX_DETAIL_WIDTH = 100;
@@ -20,7 +26,7 @@ type ToolTranscriptHandlers = {
   workspaceDirectory?: string;
 };
 
-type ToolTranscriptInputProjection = {
+export type ToolTranscriptInputProjection = {
   detailLines: string[];
   title?: string;
 };
@@ -56,12 +62,22 @@ export function applyToolTranscriptEvent(
     event.type === SessionEventType.ToolCallStarted ||
     event.type === SessionEventType.ToolCallProgress
   ) {
+    // AgentSwarm 的实时进度板：结构化 board 交给专用视图，title+rows 作纯文本后备。
+    const swarmTitle = swarmTitleFromPayload(payload);
+    const swarmRows = swarmRowsFromPayload(payload);
+    const swarmBoard = swarmBoardFromPayload(payload);
     handlers.setMessages((current) =>
       updateOrAppendToolPart(
         current,
         toolCallId,
         toolName,
-        { status: "running" },
+        {
+          status: "running",
+          ...(swarmTitle !== undefined
+            ? { title: swarmTitle, detailLines: swarmRows ?? [] }
+            : {}),
+          ...(swarmBoard === undefined ? {} : { swarmBoard }),
+        },
         assistantMessageId,
       ),
     );
@@ -129,6 +145,7 @@ export function buildToolTranscriptProjection(
   if (normalized === "todowrite") return { detailLines: todoWriteDetails(record) };
   if (normalized === "todoread") return { detailLines: ["todos: read current state"] };
   if (normalized === "agent") return { detailLines: agentDetails(record) };
+  if (normalized === "agentswarm") return agentSwarmProjection(record);
   if (normalized === "skill")
     return {
       detailLines: compactLines([fieldLine(record, "name"), fieldLine(record, "args")]),

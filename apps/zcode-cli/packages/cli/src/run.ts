@@ -23,6 +23,9 @@ import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
+import { runConnectCommand } from "./connect-command.js";
+import { runAcpServer } from "./acp-bridge.js";
+import { runWebCommand } from "./web-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
 import { isPluginHostInvocation, runPluginHostCommand } from "./plugin-host-command.js";
 import { isDwfChildInvocation, runDwfChildCommand } from "./dwf-child-command.js";
@@ -357,6 +360,12 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return await runHooksCommand(ctx, deps, version);
   }
 
+  // web 的子命令选项（--port/--host/--open/--no-build）不在全局严格 parseArgs 的
+  // 注册表内，与 hooks 同理必须在全局解析前按首参数分发；web-command 自行解析参数。
+  if (ctx.argv[0] === "web") {
+    return await runWebCommand(ctx, ctx.argv.slice(1));
+  }
+
   let parsed: ReturnType<typeof parseGlobalArgs>;
   let toolDisallowlist: readonly string[] | undefined;
 
@@ -626,6 +635,12 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       );
     case "logout":
       return await runLogoutCommand(ctx, options, commandDeps);
+    case "connect":
+      return runConnectCommand(ctx, options, parsed.positionals.slice(1));
+    case "acp":
+      return await runAcpServer(ctx);
+    case "web":
+      return await runWebCommand(ctx, parsed.positionals.slice(1), options);
     case "commands":
       return await runCommandsCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
     case "plugin":

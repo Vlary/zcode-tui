@@ -1240,6 +1240,8 @@ export const zcodeAccountAccessSchema = z.discriminatedUnion("planKind", [
 export type ZCodeAccountAccess = z.infer<typeof zcodeAccountAccessSchema>;
 
 /** Active Model 固定的账号访问类别；当前商品和 Team scope 由账号服务在请求期解析。 */
+// mode 的 "highspeed" 与 Provider 配置 enum 保持同步：服务端已发布高速通道权益，
+// 客户端尚未实现查询/选择，仅前向兼容透传，请求期解析自然回落为无凭据。
 export const zcodeProviderAccountAccessSchema = z
   .object({
     type: z.literal("zhipu-account"),

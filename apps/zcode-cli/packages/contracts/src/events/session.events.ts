@@ -944,6 +944,33 @@ export interface ToolCallProgressPayload {
   outputPreview?: ExecutionOutputPreview;
   stdoutTail?: string;
   stderrTail?: string;
+  /** AgentSwarm 实时进度：TUI 据此刷新工具卡片标题与子代理状态行。 */
+  swarmProgress?: {
+    title: string;
+    rows: string[];
+    /** 结构化板面数据：TUI 专用视图按宽度与主题做渐变标题和自适应网格。 */
+    board?: SwarmProgressBoard;
+  };
+}
+
+/** AgentSwarm 板面的结构化投影，供富文本视图布局。 */
+export interface SwarmProgressBoard {
+  description: string;
+  /** 标题模型段（如 "GLM-5.3 · max"），由 handler 从当前模型选型折算。 */
+  modelLabel?: string;
+  total: number;
+  done: number;
+  failed: number;
+  running: number;
+  entries: ReadonlyArray<{
+    index: number;
+    status: "queued" | "running" | "suspended" | "done" | "failed";
+    ticks: number;
+    item: string;
+    tokens?: number;
+    /** 终态文本：done=最终输出首段、failed=失败原因；已按单行标签预算截断。 */
+    text?: string;
+  }>;
 }
 
 export interface ToolCallResultPayload {

@@ -62,6 +62,14 @@ export function displayWidth(value: string): number {
   return width;
 }
 
+/** 右侧补空格到目标显示宽度（中文等宽字符按实际列数计）。恒宽填充让
+ *  流式刷新的文本（如 swarm 运行格的实时行）不会牵动相邻布局。 */
+export function padDisplay(value: string, targetWidth: number): string {
+  const current = displayWidth(value);
+  if (current >= targetWidth) return value;
+  return value + " ".repeat(targetWidth - current);
+}
+
 function terminalCharWidth(char: string): number {
   const code = char.codePointAt(0) ?? 0;
   if (code === 0 || code < 32 || (code >= 0x7f && code < 0xa0)) return 0;

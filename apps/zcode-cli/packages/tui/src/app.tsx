@@ -36,6 +36,7 @@ import { useSessionEventApplier } from "./app-session-event-handler.js";
 import { useTuiWorkflowRuns } from "./app-workflow-controller.js";
 import { useTuiApplyResult } from "./app-result.js";
 import { useSubagents } from "./app-subagents.js";
+import { swarmLiveIngest } from "./app-swarm-live.js";
 import type { TuiOptions } from "./types.js";
 
 type TuiAppProps = {
@@ -196,7 +197,11 @@ export function TuiApp({
 
   const applySessionEvent = useSessionEventApplier({
     subscribeSessionEvents: options.subscribeSessionEvents,
-    observeSessionEvent: subagents.onEvent,
+    // 子会话事件在主会话闸门之前先喂给 swarm 实时文本跟踪器（running cell 滚动行）。
+    observeSessionEvent: (event) => {
+      swarmLiveIngest(event);
+      subagents.onEvent(event);
+    },
     copy: copy.tui,
     getMainSessionId: options.getMainSessionId,
     setActiveTurnId,

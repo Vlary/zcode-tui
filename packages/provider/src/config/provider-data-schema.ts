@@ -11,6 +11,8 @@ export const providerGroupDataSchema = z.enum([
   "zai-family",
   "bigmodel-family",
 ]);
+// "highspeed"：Provider 服务 3.17.2 新增的高速通道权益（account:*-highspeed-card）。
+// 本客户端尚未实现其权益查询/选择，只做前向兼容放行；解析层降级为 unknown 连接状态。
 export const zhipuAccountModeDataSchema = z.enum([
   "start-plan",
   "individual-coding-plan",

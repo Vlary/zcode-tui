@@ -15,7 +15,9 @@ export const zhCN: ZCodeCopy = {
 不传 command 时，zcode 会打开全屏 TUI。
 
 命令:
-  app-server 运行 ZCode Protocol stdio app server
+  acp        以 ACP（Agent Client Protocol）agent 身份服务 stdio，可被 Zed 等编辑器驱动
+  connect [目标]  SSH 连接远程工作区（agent 在远端运行；--deploy 自动部署 CLI）
+  web        启动 Web UI（--port/--host/--open；复用仓库内 packages/server + packages/web）
   commands   列出自定义 slash commands（\`commands list\`）
   doctor     检查运行时和打包假设
   login [zai|bigmodel]  通过浏览器授权登录
