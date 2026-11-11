@@ -804,8 +804,58 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
   };
 }
 
-function resolveExternalRelayWsUrl(): string {
-  return resolveWebRemoteControlRelayWsUrl({ endpointOrigin: window.location.origin });
+// server-info 的 relay 配置由底座下发（字段宽松读取，兼容 relayWsUrl 平铺与 webRemoteControl.relayWsUrl 嵌套）；
+// 缺失或非法时回退构建注入与 origin 推导，不阻塞连接。
+function readServerInfoRelayWsUrl(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const nested = record.webRemoteControl;
+  const candidates = [
+    nested && typeof nested === "object"
+      ? (nested as Record<string, unknown>).relayWsUrl
+      : undefined,
+    record.relayWsUrl,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (/^wss?:\/\//i.test(trimmed)) return trimmed;
+  }
+  return undefined;
+}
+
+let serverInfoRelayWsUrlPromise: Promise<string | undefined> | undefined;
+
+function fetchServerInfoRelayWsUrl(): Promise<string | undefined> {
+  // server-info 是部署级静态配置，页面生命周期内只取一次；失败不阻塞连接，直接回退。
+  serverInfoRelayWsUrlPromise ??= (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetch("/api/server-info", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) return undefined;
+      return readServerInfoRelayWsUrl(await response.json());
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+  return serverInfoRelayWsUrlPromise;
+}
+
+async function resolveExternalRelayWsUrl(): Promise<string> {
+  // 本地托管（zcode web，非官方域名）时 window.location.origin 上没有 relay；
+  // 优先用 server-info 下发的 relayWsUrl，其次构建注入（VITE_ 常量），最后才按 origin 推导。
+  const fromServerInfo = await fetchServerInfoRelayWsUrl();
+  if (fromServerInfo) return fromServerInfo;
+  return resolveWebRemoteControlRelayWsUrl({
+    endpointOrigin: window.location.origin,
+    overrideUrl: import.meta.env.VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL,
+  });
 }
 
 function isZhLocale(): boolean {
@@ -1128,7 +1178,7 @@ async function bootstrapExternalRelayWebRemoteControl(
     (payload) => !terminated && !versionGuard.isBlocked() && transport.sendPayload(payload),
   );
   const transport = new WebRemoteControlTerminalTransport({
-    relayWsUrl: resolveExternalRelayWsUrl(),
+    relayWsUrl: await resolveExternalRelayWsUrl(),
     deviceSid: relayParams.deviceSid,
     deviceMid: relayParams.deviceMid,
     appVersion: relayParams.appVersion,

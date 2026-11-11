@@ -103,6 +103,12 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_ZCODE_BASE_URL": JSON.stringify(zcodeEndpointOrigin),
       // 兼容旧 Web runtime 读取名；新代码统一读 VITE_ZCODE_BASE_URL。
       "import.meta.env.VITE_ZCODE_ENDPOINT_ORIGIN": JSON.stringify(zcodeEndpointOrigin),
+      // 远控 relay WS 地址的构建期覆盖（第二优先级）：本地托管时以 server-info 动态下发优先。
+      "import.meta.env.VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL": JSON.stringify(
+        env.VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL ||
+          env.ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL ||
+          "",
+      ),
       // 明确注入 OAuth 公开配置，避免 Web 端在不同 mode 下隐式依赖源码 fallback。
       "import.meta.env.VITE_ZAI_OAUTH_CLIENT_ID": JSON.stringify(zaiOAuthClientId),
       "import.meta.env.VITE_ZAI_OAUTH_ORIGIN": JSON.stringify(zaiOAuthOrigin),

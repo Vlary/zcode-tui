@@ -8,6 +8,11 @@ import {
   readBundledZCodeBuiltinProviderConfig,
 } from "./bundledZCodeBuiltinProviderConfig.js";
 import { createHttpServer, resolveHttpServerId } from "./http.js";
+import {
+  isWebRemoteControlEnabled,
+  startWebRemoteControlDeviceRelay,
+} from "./web-remote/index.js";
+import type { ServerWebRemoteControlInfo } from "@zcode/shared";
 
 async function main(): Promise<void> {
   const zcodeBuiltinProviderConfigFilePath = await materializeBundledZCodeBuiltinProviderConfig({
@@ -28,6 +33,24 @@ async function main(): Promise<void> {
       providerProvisioningTargetEnabled: Boolean(authToken),
     });
 
+  // Web 远程控制被控端：ZCODE_WEB_REMOTE_CONTROL=1 时启动 device relay client。
+  // 无凭据（auth-required）时不注册不建连，/api/server-info 仍下发 relay 地址与 enabled=false。
+  let webRemoteControl: ServerWebRemoteControlInfo | undefined;
+  if (isWebRemoteControlEnabled(process.env)) {
+    const relay = await startWebRemoteControlDeviceRelay({
+      services,
+      workspaceIdentityMapper,
+    });
+    webRemoteControl = {
+      enabled: relay.status === "started",
+      relayWsUrl: relay.config.relayWsUrl,
+      endpointOrigin: relay.config.endpointOrigin,
+    };
+    console.log(
+      `[zcode-server:http] web remote control device relay ${relay.status} (relay=${relay.config.relayWsUrl} mid=${relay.deviceMid})`,
+    );
+  }
+
   createHttpServer(services, port, {
     serverId,
     workspaceIdentityMapper,
@@ -37,6 +60,7 @@ async function main(): Promise<void> {
     ...(host ? { host } : {}),
     ...(staticRoot ? { staticRoot, spaFallback: true } : {}),
     ...(authToken ? { authToken, authRequired: true } : {}),
+    ...(webRemoteControl ? { webRemoteControl } : {}),
   });
 }
 

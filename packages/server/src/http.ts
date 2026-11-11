@@ -38,6 +38,7 @@ import {
   type BotProvider,
   type ServerRemoteInfo,
   type ServerRemoteWorkspaceInfo,
+  type ServerWebRemoteControlInfo,
 } from "@zcode/shared";
 import {
   SourceServerWorkspaceIdentityChannelServer,
@@ -94,7 +95,27 @@ function setupChannelServer(
   workspaceIdentityMapper?: SourceServerWorkspaceIdentityMapper,
   resourcePeers?: TopicResourcePeers,
 ) {
-  const socket = wrapWebSocket(ws);
+  setupChannelServerOverSocket(
+    wrapWebSocket(ws),
+    services,
+    clientMode,
+    workspaceIdentityMapper,
+    resourcePeers,
+  );
+}
+
+/**
+ * setupChannelServer 的 ISocket 版：Web 远程控制被控端的进程内桥
+ * （web-remote/webRemoteControlChannelBridge.ts）不经真实 WS host，
+ * 用 createInMemorySocketPair 的一端走与 /ws 完全相同的 ChannelServer 装配链。
+ */
+export function setupChannelServerOverSocket(
+  socket: ISocket,
+  services: ServiceCollection,
+  clientMode: "desktop-continuous" | "web-remote-replayable",
+  workspaceIdentityMapper?: SourceServerWorkspaceIdentityMapper,
+  resourcePeers?: TopicResourcePeers,
+) {
   const protocol = new SocketProtocol(socket);
   const rawServer = new ChannelServer(protocol, "server");
   // 用日志中间件包装，统一记录所有 RPC 调用
@@ -153,6 +174,8 @@ export interface HttpServerOptions {
   spaFallback?: boolean;
   staticRoot?: string;
   workspaces?: ServerRemoteWorkspaceInfo[];
+  /** Web 远程控制被控端（device relay）配置；随 /api/server-info 下发给手机页。 */
+  webRemoteControl?: ServerWebRemoteControlInfo;
 }
 
 function readTrimmedEnv(name: string): string | undefined {
@@ -199,6 +222,7 @@ function createServerInfo(options: HttpServerOptions): ServerRemoteInfo {
       processResourceTelemetry: true,
       remoteConversationTelemetry: true,
     },
+    ...(options.webRemoteControl ? { webRemoteControl: options.webRemoteControl } : {}),
   });
 }
 

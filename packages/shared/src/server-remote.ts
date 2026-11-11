@@ -25,6 +25,20 @@ const serverRemoteInfoBaseShape = {
   authRequired: z.boolean(),
 };
 
+/**
+ * Web 远程控制被控端（device relay）配置：随 /api/server-info 下发，供手机页取
+ * relay WS 地址。enabled=false 表示本 Server 未启用被控（无凭据或未开 env 门禁）。
+ */
+export const serverWebRemoteControlInfoSchema = z
+  .object({
+    enabled: z.boolean(),
+    relayWsUrl: z.string().min(1),
+    endpointOrigin: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+export type ServerWebRemoteControlInfo = z.infer<typeof serverWebRemoteControlInfoSchema>;
+
 export const serverRemoteInfoSchema = z.object({
   ...serverRemoteInfoBaseShape,
   workspaces: z.array(serverRemoteWorkspaceInfoSchema),
@@ -44,6 +58,7 @@ export const serverRemoteInfoSchema = z.object({
     processResourceTelemetry: z.boolean().optional(),
     remoteConversationTelemetry: z.boolean().optional(),
   }),
+  webRemoteControl: serverWebRemoteControlInfoSchema.optional(),
 });
 
 export const serverRemoteInfoOutputSchema = z
@@ -69,6 +84,7 @@ export const serverRemoteInfoOutputSchema = z
         remoteConversationTelemetry: z.boolean().optional(),
       })
       .strict(),
+    webRemoteControl: serverWebRemoteControlInfoSchema.optional(),
   })
   .strict();
 

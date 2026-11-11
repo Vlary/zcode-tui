@@ -17,6 +17,8 @@ export interface WebCommandOptions {
   noBuild: boolean;
   open: boolean;
   port: number;
+  /** 启动被控端：向 server 子进程注入 ZCODE_WEB_REMOTE_CONTROL=1 并透传 relay 相关 env。 */
+  remote: boolean;
 }
 
 const DEFAULT_WEB_PORT = 3030;
@@ -27,6 +29,7 @@ export function parseWebArgs(args: readonly string[]): { options?: WebCommandOpt
   let host: string | undefined;
   let open = false;
   let noBuild = false;
+  let remote = false;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!;
     if (arg === "--port" || arg === "-p") {
@@ -56,11 +59,15 @@ export function parseWebArgs(args: readonly string[]): { options?: WebCommandOpt
       open = true;
     } else if (arg === "--no-build") {
       noBuild = true;
+    } else if (arg === "--remote") {
+      remote = true;
     } else {
-      return { error: `未知参数 "${arg}"。用法：zcode web [--port N] [--host H] [--open] [--no-build]` };
+      return {
+        error: `未知参数 "${arg}"。用法：zcode web [--port N] [--host H] [--open] [--no-build] [--remote]`,
+      };
     }
   }
-  return { options: { ...(host ? { host } : {}), noBuild, open, port } };
+  return { options: { ...(host ? { host } : {}), noBuild, open, port, remote } };
 }
 
 /** 从 zcode.cjs 位置向上找到含 packages/server 的仓库根；env 可直接指定。 */
@@ -168,8 +175,28 @@ export async function runWebCommand(ctx: RunContext, args: readonly string[], _o
     PORT: String(web.port),
     ZCODE_WEB_STATIC_ROOT: webDist,
     ...(web.host ? { ZCODE_SERVER_HOST: web.host } : {}),
+    // --remote：显式注入总开关并透传 relay 覆盖入口（此前仅靠 ...process.env 隐式透传）。
+    ...(web.remote
+      ? {
+          ZCODE_WEB_REMOTE_CONTROL: "1",
+          ...(process.env["ZCODE_WEB_REMOTE_CONTROL_URL"]?.trim()
+            ? { ZCODE_WEB_REMOTE_CONTROL_URL: process.env["ZCODE_WEB_REMOTE_CONTROL_URL"]!.trim() }
+            : {}),
+          ...(process.env["ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL"]?.trim()
+            ? {
+                ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL:
+                  process.env["ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL"]!.trim(),
+              }
+            : {}),
+          ...(process.env["ZCODE_WEB_REMOTE_CONTROL_JWT"]?.trim()
+            ? { ZCODE_WEB_REMOTE_CONTROL_JWT: process.env["ZCODE_WEB_REMOTE_CONTROL_JWT"]!.trim() }
+            : {}),
+        }
+      : {}),
   };
-  ctx.stdout.write(`启动 zcode web（静态目录 ${webDist}）…\n`);
+  ctx.stdout.write(
+    `启动 zcode web（静态目录 ${webDist}${web.remote ? "，被控端已启用" : ""}）…\n`,
+  );
   const child = spawn(process.execPath, [serverEntry], { env, stdio: "inherit" });
 
   // 覆盖默认信号行为后必须自己负责退出：转发给 child 后以 128+N 约定码收尾，
@@ -201,7 +228,13 @@ export async function runWebCommand(ctx: RunContext, args: readonly string[], _o
   const ready = await waitForReady(readyUrl, READY_TIMEOUT_MS, () => childGone);
   const displayHost = web.host ?? "127.0.0.1";
   if (ready) {
-    ctx.stdout.write(`\nzcode web 已就绪：http://${displayHost}:${web.port}\n按 Ctrl+C 停止。\n`);
+    ctx.stdout.write(
+      `\nzcode web 已就绪：http://${displayHost}:${web.port}` +
+        (web.remote
+        ? "\nWeb 远程控制被控端已启动；配对入口见 server 启动日志中的 pair url（/api/server-info 亦含 relay 配置）。"
+        : "") +
+        `\n按 Ctrl+C 停止。\n`,
+    );
     if (web.open) openBrowser(`http://${displayHost}:${web.port}`);
   } else if (childGone) {
     const fact = childExitFact;
