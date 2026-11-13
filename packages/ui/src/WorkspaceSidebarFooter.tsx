@@ -38,6 +38,7 @@ import {
   Maximize,
   Palette,
   Settings,
+  Smartphone,
   User,
   ZoomIn,
   ZoomOut,
@@ -49,6 +50,7 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
 import type { Theme } from "@/useTheme.js";
+import { PhonePairingDialog } from "@/PhonePairingDialog.js";
 import { WorkspaceWebRemoteControlTrigger } from "@/WorkspaceWebRemoteControlTrigger.js";
 import {
   WorkspaceSidebarFooterPlanBadge,
@@ -192,6 +194,7 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
       : intl.formatMessage({ id: "settings.title" });
   const usageButtonClick = onUsageClick ?? onSettingsButtonClick;
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [phonePairingOpen, setPhonePairingOpen] = useState(false);
   const [desktopZoomLevel, setDesktopZoomLevel] = useState(0);
   const runDesktopZoomCommand = useCallback(
     (command: (typeof DesktopCommandIds)["ZoomIn" | "ZoomOut" | "ResetZoom"]) => {
@@ -435,6 +438,17 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
               onUsageClick={usageButtonClick}
               onUpgradeClick={onUpgradeClick}
             />
+            {/* Web 模式的手机配对入口：桌面端已有专属远控触发按钮（见下方 isDesktop 门禁），
+                且桌面进程不提供 /api/web-remote-control/pairing，故仅 Web 渲染。 */}
+            {!isDesktop ? (
+              <DropdownMenuItem
+                onSelect={() => setPhonePairingOpen(true)}
+                data-testid="phone-pairing-menu-item"
+              >
+                <Smartphone className="size-4" />
+                {intl.formatMessage({ id: "phonePairing.menuTitle" })}
+              </DropdownMenuItem>
+            ) : null}
             {user ? (
               <DropdownMenuItem onSelect={() => openRewards?.()} data-testid="rewards-menu-item">
                 <Gift className="size-4" />
@@ -490,6 +504,9 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
           </ControlHintTooltip>
         </div>
       </div>
+      {!isDesktop ? (
+        <PhonePairingDialog open={phonePairingOpen} onOpenChange={setPhonePairingOpen} />
+      ) : null}
     </footer>
   );
 });

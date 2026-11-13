@@ -9,12 +9,19 @@ import {
   type WebRemoteControlWorkspaceTarget,
 } from "@zcode/shared";
 import { WebRemoteControlV2ConnectionError } from "@zcode/shared/web-remote-relay";
-import { setupChannelServerOverSocket } from "../http.js";
+import {
+  setupChannelServerOverSocket,
+  type WebRemoteControlPairingInfo,
+  type WebRemoteControlPairingStatusKind,
+} from "../http.js";
 import {
   createWebRemoteControlDeviceFileStorage,
   createWebRemoteControlDeviceIdentity,
 } from "./webRemoteControlDeviceIdentity.js";
-import { createWebRemoteControlDeviceManager } from "./webRemoteControlDeviceManager.js";
+import {
+  createWebRemoteControlDeviceManager,
+  type WebRemoteControlDeviceStatus,
+} from "./webRemoteControlDeviceManager.js";
 import {
   createWebRemoteControlServerLogin,
   WEB_REMOTE_CONTROL_JWT_ENV,
@@ -100,7 +107,61 @@ export interface WebRemoteControlDeviceRelayHandle {
   status: "started" | "auth-required";
   config: WebRemoteControlServerConfig;
   deviceMid: string;
+  /** 配对二维码与 relay 注册使用的设备名（zcode-server@<cwd basename>）。 */
+  deviceName: string;
+  /** 被控端实时状态（manager.getStatus 的透传）；配对路由每次请求调用。 */
+  getStatus(): WebRemoteControlDeviceStatus;
   stop(reason: string): Promise<void>;
+}
+
+/**
+ * manager 实时状态 → GET /api/web-remote-control/pairing 契约映射：
+ * - idle → off：relay handle 已装配但运行时未起/已停，与未启用同形（enabled=false）。
+ * - starting/running → waiting-terminal：running 即 transport waiting_terminal（已连
+ *   relay 等手机）；starting 阶段 qrUrl 尚未生成（manager 初始空串，getStatusOf 省略），
+ *   前端以字段缺失渲染 loading。
+ * - active → paired；auth-required/error → error。
+ * enabled 仅在 idle 与 auth 门禁（启动即无凭据 / JWT 被替换）时为 false：auth-required
+ * 映射 enabled=false + status="error"（远控已按 env 尝试启用，与「未启用 off」区分，
+ * 与 /api/server-info 的 enabled=relay.status==="started" 语义一致）。
+ */
+export function toWebRemoteControlPairingInfo(
+  handle: WebRemoteControlDeviceRelayHandle,
+): WebRemoteControlPairingInfo {
+  const device = handle.getStatus();
+  let pairingStatus: WebRemoteControlPairingStatusKind;
+  let enabled: boolean;
+  switch (device.status) {
+    case "active":
+      pairingStatus = "paired";
+      enabled = true;
+      break;
+    case "starting":
+    case "running":
+      pairingStatus = "waiting-terminal";
+      enabled = true;
+      break;
+    case "error":
+      pairingStatus = "error";
+      enabled = true;
+      break;
+    case "auth-required":
+      pairingStatus = "error";
+      enabled = false;
+      break;
+    case "idle":
+    default:
+      pairingStatus = "off";
+      enabled = false;
+      break;
+  }
+  return {
+    enabled,
+    status: pairingStatus,
+    ...(device.qrUrl ? { qrUrl: device.qrUrl } : {}),
+    deviceName: handle.deviceName,
+    relayWsUrl: handle.config.relayWsUrl,
+  };
 }
 
 const fallbackLogger = {
@@ -145,12 +206,13 @@ export async function startWebRemoteControlDeviceRelay(
     storage,
     logger,
   });
+  const deviceName = `zcode-server@${basename(process.cwd()) || "server"}`;
   const manager = createWebRemoteControlDeviceManager({
     endpointOrigin: config.endpointOrigin,
     relayWsUrl: config.relayWsUrl,
     remoteControlUrl: config.remoteControlUrl,
     deviceMid,
-    deviceName: `zcode-server@${basename(process.cwd()) || "server"}`,
+    deviceName,
     appVersion: ZCODE_VERSION,
     platform: process.platform,
     getLogin: () => loginProvider.getLogin(),
@@ -171,6 +233,8 @@ export async function startWebRemoteControlDeviceRelay(
     status: status.status === "auth-required" ? "auth-required" : "started",
     config,
     deviceMid,
+    deviceName,
+    getStatus: () => manager.getStatus(),
     stop: (reason) => manager.stop(reason),
   };
 }

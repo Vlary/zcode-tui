@@ -176,6 +176,25 @@ export interface HttpServerOptions {
   workspaces?: ServerRemoteWorkspaceInfo[];
   /** Web 远程控制被控端（device relay）配置；随 /api/server-info 下发给手机页。 */
   webRemoteControl?: ServerWebRemoteControlInfo;
+  /**
+   * Web 远程控制配对状态的实时查询（GET /api/web-remote-control/pairing）。
+   * 每次请求实时调用，不做启动时快照；未提供（env 未启用被控端）时路由固定回
+   * { enabled: false, status: "off" }。由 entry-http 从 device relay handle 装配。
+   */
+  webRemoteControlPairing?: () => WebRemoteControlPairingInfo;
+}
+
+/** GET /api/web-remote-control/pairing 的响应契约（Web 前端按同一字段约定实现）。 */
+export type WebRemoteControlPairingStatusKind = "off" | "waiting-terminal" | "paired" | "error";
+
+export interface WebRemoteControlPairingInfo {
+  /** 被控端是否已启用（env 开且 relay 已装配；auth 门禁下视为未启用）。 */
+  enabled: boolean;
+  status: WebRemoteControlPairingStatusKind;
+  /** 配对二维码 URL；starting 阶段尚未生成时省略，前端以字段缺失渲染 loading。 */
+  qrUrl?: string;
+  deviceName?: string;
+  relayWsUrl?: string;
 }
 
 function readTrimmedEnv(name: string): string | undefined {
@@ -389,6 +408,11 @@ export function createHttpServer(
 
   app.get("/api/server-info", (c) => c.json(createServerInfo(options)));
   app.post("/api/rpc-host-capability", (c) => c.json(hostCapabilities.issue()));
+  // Web UI 配对入口：每次请求实时读取被控端状态；未装配 getter（env 未启用）时回 off。
+  app.get(
+    "/api/web-remote-control/pairing",
+    (c) => c.json(options.webRemoteControlPairing?.() ?? { enabled: false, status: "off" as const }),
+  );
 
   // 普通 `/ws` 永远是 terminal-client；浏览器/任意客户端设置旧 mode header
   // 都不能再把自己提升为 trusted host。

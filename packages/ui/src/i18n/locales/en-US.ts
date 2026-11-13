@@ -2721,6 +2721,16 @@ const enUS: Record<string, string> = {
     "Web remote control mode can only open workspaces that are already open in the current desktop window.",
   "webRemoteControl.failure.unexpectedError":
     "Could not start mobile remote control. Try again from desktop.",
+  "phonePairing.menuTitle": "Pair phone",
+  "phonePairing.title": "Pair phone",
+  "phonePairing.description":
+    "Scan the QR code to connect your phone to this server and control the workspace remotely.",
+  "phonePairing.notEnabled": "Not enabled (zcode web --remote)",
+  "phonePairing.waiting": "Waiting for phone to scan…",
+  "phonePairing.paired": "Paired",
+  "phonePairing.device": "Device: {name}",
+  "phonePairing.qrAlt": "Phone pairing QR code",
+  "phonePairing.error": "Pairing service is unavailable. Try again later.",
   "webRemoteControl.copyLink": "Copy link",
   "webRemoteControl.copyLink.copied": "Remote control link copied",
   "webRemoteControl.copyLinkFailed": "Could not copy remote control link: {error}",

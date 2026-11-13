@@ -32,7 +32,19 @@
 //   R7 workspace-bridge-open → workspace-bridge-ready（bridge.kind=local 进程内桥，
 //      装配同 http.ts setupChannelServerOverSocket）；
 //   R8 发一条 rpc-frame（terminal 侧 acknowledged 协议，packages/client 源），
-//      断言收到 rpc-frame-ack（ACK；若收到组装回包也计入响应）。
+//      断言收到 rpc-frame-ack（ACK；若收到组装回包也计入响应）；
+//   Rp1 GET /api/web-remote-control/pairing 返回 enabled=true 且
+//      status ∈ {waiting-terminal, paired}（http.ts 契约 + web-remote/index.ts
+//      toWebRemoteControlPairingInfo 的 manager 状态映射，每请求实时读）；
+//   Rp2 qrUrl 存在且含非空 sid/mid 查询参数（buildWebRemoteControlExternalQrUrl
+//      语义：shared/src/web-remote-control.ts，sid=deviceSid、mid=deviceMid）；
+//   Rp3 terminal 配对完成后再次 GET pairing，status 变为 paired。
+//   Rp1-3 的观测点挂在 R5 配对前后（Rp1/Rp2 在 R5 前，Rp3 在 R5 后）：既有 R8 会
+//   把非 RPC 原始字节喂进 ChannelServer，device 进程在 R8 结束后毫秒级必然崩溃
+//   （ChannelServer.onRawMessage 对未识别消息 deserialize 得 undefined 直接抛
+//   TypeError，packages/rpc/src/channelServer.ts:69——先于本扩展即存在，属产品
+//   健壮性缺陷，本脚本不修），R8 之后 server 已死，pairing 端点无从查询。Rp3
+//   复用 R5 这条配对后持续持有的 terminal 连接（R6-R8 同一条 WS），不另起配对。
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -400,6 +412,76 @@ async function main() {
       `PASS R4: device 注册并在线 sid=${deviceSid} mid=${registerCall.body.device_mid}`,
     );
 
+    // Rp1：GET /api/web-remote-control/pairing 基本契约（http.ts:411-415 路由每次请求
+    // 实时读 manager，entry-http.ts:51-53 装配 getter）。放在 R5 配对前的窗口：
+    // 此时 transport=waiting_terminal → 预期 status=waiting-terminal（allowed set
+    // {waiting-terminal, paired} 依据 ask）。轮询探测与 R3/R4 同一容错口径。
+    const pairingUrl = `http://127.0.0.1:${port}/api/web-remote-control/pairing`;
+    let pairingBefore;
+    try {
+      pairingBefore = await waitFor(
+        "pairing 响应（GET /api/web-remote-control/pairing）",
+        PAIR_TIMEOUT_MS,
+        async () => {
+          let fetched;
+          try {
+            fetched = await fetchJson(pairingUrl);
+          } catch (error) {
+            const cause = error?.cause?.code ?? error?.cause?.message ?? error?.message;
+            throw new Error(`fetch failed（${cause}）`);
+          }
+          if (!fetched.response.ok || !fetched.json || typeof fetched.json !== "object") {
+            throw new Error(`HTTP ${fetched.response.status} ${fetched.text.slice(0, 200)}`);
+          }
+          return fetched.json;
+        },
+        serverChild,
+        serverOut,
+        serverErr,
+      );
+    } catch (error) {
+      throw new AssertError(
+        `Rp1: pairing 响应异常：${error instanceof AssertError ? error.message : String(error)}` +
+          `${deviceOutputTail(serverOut, serverErr)}`,
+      );
+    }
+    assert(
+      pairingBefore.enabled === true,
+      `Rp1: pairing.enabled!==true：${JSON.stringify(pairingBefore)}`,
+    );
+    assert(
+      pairingBefore.status === "waiting-terminal" || pairingBefore.status === "paired",
+      `Rp1: pairing.status=${JSON.stringify(pairingBefore.status)} 不在 {waiting-terminal, paired}：` +
+        JSON.stringify(pairingBefore),
+    );
+    console.log(
+      `PASS Rp1: pairing enabled=true status=${pairingBefore.status}` +
+        `（deviceName=${pairingBefore.deviceName}）`,
+    );
+
+    // Rp2：qrUrl 存在且含非空 sid/mid（buildWebRemoteControlExternalQrUrl 语义，
+    // shared/src/web-remote-control.ts:168-191——sid=deviceSid、mid=deviceMid 必带）。
+    assert(
+      typeof pairingBefore.qrUrl === "string" && pairingBefore.qrUrl.length > 0,
+      `Rp2: pairing 缺 qrUrl：${JSON.stringify(pairingBefore)}`,
+    );
+    let pairingQrUrl;
+    try {
+      pairingQrUrl = new URL(pairingBefore.qrUrl);
+    } catch (error) {
+      throw new AssertError(
+        `Rp2: qrUrl 无法解析：${pairingBefore.qrUrl}（${error instanceof Error ? error.message : String(error)}）`,
+      );
+    }
+    const pairingQrSid = pairingQrUrl.searchParams.get("sid") ?? "";
+    const pairingQrMid = pairingQrUrl.searchParams.get("mid") ?? "";
+    assert(pairingQrSid.length > 0, `Rp2: qrUrl 缺 sid 参数：${pairingBefore.qrUrl}`);
+    assert(pairingQrMid.length > 0, `Rp2: qrUrl 缺 mid 参数：${pairingBefore.qrUrl}`);
+    console.log(
+      `PASS Rp2: qrUrl 含 sid/mid（${pairingQrUrl.origin}${pairingQrUrl.pathname}` +
+        `?sid=${pairingQrSid}&mid=${pairingQrMid}&…）`,
+    );
+
     // R5：terminal 配对（adapters/webRemoteControlV2Token.ts 的 role=terminal 语义）。
     terminal = await connectTerminal({ relay, jwt: E2E_JWT, deviceSid, parseIncoming: parseWebRemoteControlRelayV2IncomingMessage });
     const authAck = await terminal.waitForControl(
@@ -408,6 +490,32 @@ async function main() {
       "auth_ack(pair_status=matched)",
     );
     console.log(`PASS R5: terminal 配对 matched（terminal_sid=${authAck.terminal_sid}）`);
+
+    // Rp3：terminal 配对完成后再次 GET pairing，status 变为 paired。直接复用 R5 这条
+    // 持续持有的 terminal 连接（后续 R6-R8 同一条 WS），不另起配对时序；transport
+    // paired → manager active（webRemoteControlDeviceManager.ts:833-835 mapTransportState
+    // → web-remote/index.ts:134-137 toWebRemoteControlPairingInfo）可能有毫秒级传播，
+    // 轮询等待而非单次快照。
+    const pairingAfter = await waitFor(
+      "pairing status=paired（terminal 配对后）",
+      PAIR_TIMEOUT_MS,
+      async () => {
+        const { response, json } = await fetchJson(pairingUrl);
+        if (!response.ok || !json || typeof json !== "object") return undefined;
+        return json.status === "paired" ? json : undefined;
+      },
+      serverChild,
+      serverOut,
+      serverErr,
+    );
+    assert(
+      pairingAfter.enabled === true,
+      `Rp3: paired 状态下 enabled!==true：${JSON.stringify(pairingAfter)}`,
+    );
+    console.log(
+      `PASS Rp3: terminal 配对后 pairing status=paired` +
+        `（Rp1 时为 ${pairingBefore.status}，qrUrl sid=${pairingQrSid}）`,
+    );
 
     // R6：bootstrap（owner 认领 + 工作区列表）。
     terminal.sendPayload({

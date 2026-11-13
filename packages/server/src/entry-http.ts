@@ -7,10 +7,11 @@ import {
   materializeBundledZCodeBuiltinProviderConfig,
   readBundledZCodeBuiltinProviderConfig,
 } from "./bundledZCodeBuiltinProviderConfig.js";
-import { createHttpServer, resolveHttpServerId } from "./http.js";
+import { createHttpServer, resolveHttpServerId, type WebRemoteControlPairingInfo } from "./http.js";
 import {
   isWebRemoteControlEnabled,
   startWebRemoteControlDeviceRelay,
+  toWebRemoteControlPairingInfo,
 } from "./web-remote/index.js";
 import type { ServerWebRemoteControlInfo } from "@zcode/shared";
 
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
   // Web 远程控制被控端：ZCODE_WEB_REMOTE_CONTROL=1 时启动 device relay client。
   // 无凭据（auth-required）时不注册不建连，/api/server-info 仍下发 relay 地址与 enabled=false。
   let webRemoteControl: ServerWebRemoteControlInfo | undefined;
+  let webRemoteControlPairing: (() => WebRemoteControlPairingInfo) | undefined;
   if (isWebRemoteControlEnabled(process.env)) {
     const relay = await startWebRemoteControlDeviceRelay({
       services,
@@ -46,6 +48,9 @@ async function main(): Promise<void> {
       relayWsUrl: relay.config.relayWsUrl,
       endpointOrigin: relay.config.endpointOrigin,
     };
+    // 配对状态每次请求实时读 manager（starting→waiting-terminal 且 qrUrl 未生成、
+    // auth 门禁→enabled=false+error 等都随状态机变化），不能复用上面的启动时快照。
+    webRemoteControlPairing = () => toWebRemoteControlPairingInfo(relay);
     console.log(
       `[zcode-server:http] web remote control device relay ${relay.status} (relay=${relay.config.relayWsUrl} mid=${relay.deviceMid})`,
     );
@@ -61,6 +66,7 @@ async function main(): Promise<void> {
     ...(staticRoot ? { staticRoot, spaFallback: true } : {}),
     ...(authToken ? { authToken, authRequired: true } : {}),
     ...(webRemoteControl ? { webRemoteControl } : {}),
+    ...(webRemoteControlPairing ? { webRemoteControlPairing } : {}),
   });
 }
 
