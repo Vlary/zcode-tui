@@ -451,4 +451,42 @@ describe("web remote control device (server side) e2e over fake-relay-v2", () =>
     });
     expect(await none.getLogin()).toBeUndefined();
   });
+
+  it("prefers the credential store zcode JWT over the OAuth access token", async () => {
+    const { createWebRemoteControlServerLogin } = await import(
+      "../../src/web-remote/webRemoteControlLogin.js"
+    );
+    const logger = { warn: () => undefined };
+    const withZcodeJwt = createWebRemoteControlServerLogin({
+      env: { ZCODE_WEB_REMOTE_CONTROL_JWT: "env-jwt" },
+      credentialRepo: {
+        loadActiveTokenSet: async () => ({
+          accessToken: "oauth-at",
+          zcodeJwtToken: " zcode-jwt ",
+        }),
+        loadActiveUserProfile: async () => ({ id: "user-1" }),
+      },
+      logger,
+    });
+    expect(await withZcodeJwt.getLogin()).toEqual({
+      userId: "user-1",
+      jwt: "zcode-jwt",
+    });
+
+    const blankZcodeJwt = createWebRemoteControlServerLogin({
+      env: { ZCODE_WEB_REMOTE_CONTROL_JWT: "env-jwt" },
+      credentialRepo: {
+        loadActiveTokenSet: async () => ({
+          accessToken: " oauth-at ",
+          zcodeJwtToken: "   ",
+        }),
+        loadActiveUserProfile: async () => ({ id: "user-1" }),
+      },
+      logger,
+    });
+    expect(await blankZcodeJwt.getLogin()).toEqual({
+      userId: "user-1",
+      jwt: "oauth-at",
+    });
+  });
 });

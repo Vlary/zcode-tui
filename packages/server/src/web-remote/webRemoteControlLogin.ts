@@ -18,7 +18,7 @@ export const WEB_REMOTE_CONTROL_JWT_ENV = "ZCODE_WEB_REMOTE_CONTROL_JWT";
 export const WEB_REMOTE_CONTROL_ENV_LOGIN_USER_ID = "zcode-web-remote-control-env";
 
 interface WebRemoteControlCredentialRepoLike {
-  loadActiveTokenSet(): Promise<{ accessToken?: string } | null>;
+  loadActiveTokenSet(): Promise<{ accessToken?: string; zcodeJwtToken?: string } | null>;
   loadActiveUserProfile(): Promise<{ id?: string } | null>;
 }
 
@@ -52,7 +52,13 @@ export function createWebRemoteControlServerLogin(
       const accessToken = tokenSet?.accessToken?.trim();
       if (accessToken) {
         const profile = await repo.loadActiveUserProfile().catch(() => null);
-        return { userId: profile?.id?.trim() || "credential-store", jwt: accessToken };
+        // relay 与 zcode-plan API 同源鉴权：ZAI/BigModel 账号必须用 zcode 平台 JWT
+        // （loadTokenSet 返回的 zcodeJwtToken，即 credential store 的 zcodejwttoken）。
+        // OAuth access_token 会被 relay 拒绝：实测 POST /api/v1/remote/token 用
+        // oauth access_token 返回 401，用 zcodeJwtToken 返回 200/code:0（billing
+        // 端点同此语义，见 codingPlanProviderAvailability.ts 的 Bearer 选择）。
+        const jwt = tokenSet?.zcodeJwtToken?.trim() || accessToken;
+        return { userId: profile?.id?.trim() || "credential-store", jwt };
       }
       const envJwt = env[WEB_REMOTE_CONTROL_JWT_ENV]?.trim();
       if (envJwt) return { userId: WEB_REMOTE_CONTROL_ENV_LOGIN_USER_ID, jwt: envJwt };
